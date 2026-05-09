@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# User runtime data (created at first launch)
+autobible_settings.json
+
+# Editor / OS
+.claude/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Misc local files
+image.jpg
+사용법.txt
