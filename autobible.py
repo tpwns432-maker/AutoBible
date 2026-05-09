@@ -1,0 +1,2025 @@
+"""
+AutoBible - Bible Verse Clipboard Monitor & Viewer
+"""
+
+import tkinter as tk
+from tkinter import ttk
+import sqlite3
+import os
+import sys
+import re
+import json
+import threading
+import time
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+def get_base_dir():
+    """Get the base directory - works for both script and PyInstaller exe."""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle: use exe's directory (not temp _MEIPASS)
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_resource_dir():
+    """Get bundled resource directory (for --add-data assets inside exe)."""
+    if getattr(sys, 'frozen', False):
+        return sys._MEIPASS
+    return os.path.dirname(os.path.abspath(__file__))
+
+BASE_DIR = get_base_dir()
+SETTINGS_FILE = "autobible_settings.json"
+BIBLE_DIR = "bible_versions"
+
+# Qwerty -> 한글 자모 변환 매핑 (두벌식)
+QWERTY_TO_HANGUL = {
+    'r': 'ㄱ', 'R': 'ㄲ', 's': 'ㄴ', 'e': 'ㄷ', 'E': 'ㄸ',
+    'f': 'ㄹ', 'a': 'ㅁ', 'q': 'ㅂ', 'Q': 'ㅃ', 't': 'ㅅ',
+    'T': 'ㅆ', 'd': 'ㅇ', 'w': 'ㅈ', 'W': 'ㅉ', 'c': 'ㅊ',
+    'z': 'ㅋ', 'x': 'ㅌ', 'v': 'ㅍ', 'g': 'ㅎ',
+    'k': 'ㅏ', 'o': 'ㅐ', 'i': 'ㅑ', 'O': 'ㅒ', 'j': 'ㅓ',
+    'p': 'ㅔ', 'u': 'ㅕ', 'P': 'ㅖ', 'h': 'ㅗ', 'y': 'ㅛ',
+    'n': 'ㅜ', 'b': 'ㅠ', 'm': 'ㅡ', 'l': 'ㅣ',
+}
+
+CHOSEONG = list('ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ')
+JUNGSEONG = list('ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ')
+JONGSEONG = [''] + list('ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ')
+
+COMPLEX_JUNGSEONG = {
+    ('ㅗ', 'ㅏ'): 'ㅘ', ('ㅗ', 'ㅐ'): 'ㅙ', ('ㅗ', 'ㅣ'): 'ㅚ',
+    ('ㅜ', 'ㅓ'): 'ㅝ', ('ㅜ', 'ㅔ'): 'ㅞ', ('ㅜ', 'ㅣ'): 'ㅟ',
+    ('ㅡ', 'ㅣ'): 'ㅢ',
+}
+
+COMPLEX_JONGSEONG = {
+    ('ㄱ', 'ㅅ'): 'ㄳ', ('ㄴ', 'ㅈ'): 'ㄵ', ('ㄴ', 'ㅎ'): 'ㄶ',
+    ('ㄹ', 'ㄱ'): 'ㄺ', ('ㄹ', 'ㅁ'): 'ㄻ', ('ㄹ', 'ㅂ'): 'ㄼ',
+    ('ㄹ', 'ㅅ'): 'ㄽ', ('ㄹ', 'ㅌ'): 'ㄾ', ('ㄹ', 'ㅍ'): 'ㄿ',
+    ('ㄹ', 'ㅎ'): 'ㅀ', ('ㅂ', 'ㅅ'): 'ㅄ', ('ㅅ', 'ㅅ'): 'ㅆ',
+}
+
+# 한국어 성경 책 이름 매핑
+KOREAN_BOOK_MAP = {
+    '창': (10, '창', '창세기'), '창세기': (10, '창', '창세기'), '창세': (10, '창', '창세기'),
+    '출': (20, '출', '출애굽기'), '출애굽기': (20, '출', '출애굽기'), '출애': (20, '출', '출애굽기'),
+    '레': (30, '레', '레위기'), '레위기': (30, '레', '레위기'), '레위': (30, '레', '레위기'),
+    '민': (40, '민', '민수기'), '민수기': (40, '민', '민수기'), '민수': (40, '민', '민수기'),
+    '신': (50, '신', '신명기'), '신명기': (50, '신', '신명기'), '신명': (50, '신', '신명기'),
+    '수': (60, '수', '여호수아'), '여호수아': (60, '수', '여호수아'), '여호': (60, '수', '여호수아'),
+    '삿': (70, '삿', '사사기'), '사사기': (70, '삿', '사사기'), '사사': (70, '삿', '사사기'),
+    '룻': (80, '룻', '룻기'), '룻기': (80, '룻', '룻기'),
+    '삼상': (90, '삼상', '사무엘상'), '사무엘상': (90, '삼상', '사무엘상'),
+    '삼하': (100, '삼하', '사무엘하'), '사무엘하': (100, '삼하', '사무엘하'),
+    '왕상': (110, '왕상', '열왕기상'), '열왕기상': (110, '왕상', '열왕기상'),
+    '왕하': (120, '왕하', '열왕기하'), '열왕기하': (120, '왕하', '열왕기하'),
+    '대상': (130, '대상', '역대상'), '역대상': (130, '대상', '역대상'),
+    '대하': (140, '대하', '역대하'), '역대하': (140, '대하', '역대하'),
+    '스': (150, '스', '에스라'), '에스라': (150, '스', '에스라'),
+    '느': (160, '느', '느헤미야'), '느헤미야': (160, '느', '느헤미야'), '느헤': (160, '느', '느헤미야'),
+    '에': (190, '에', '에스더'), '에스더': (190, '에', '에스더'),
+    '욥': (220, '욥', '욥기'), '욥기': (220, '욥', '욥기'),
+    '시': (230, '시', '시편'), '시편': (230, '시', '시편'),
+    '잠': (240, '잠', '잠언'), '잠언': (240, '잠', '잠언'),
+    '전': (250, '전', '전도서'), '전도서': (250, '전', '전도서'), '전도': (250, '전', '전도서'),
+    '아': (260, '아', '아가'), '아가': (260, '아', '아가'), '아가서': (260, '아', '아가'),
+    '사': (290, '사', '이사야'), '이사야': (290, '사', '이사야'),
+    '렘': (300, '렘', '예레미야'), '예레미야': (300, '렘', '예레미야'), '예레': (300, '렘', '예레미야'),
+    '애': (310, '애', '예레미야애가'), '예레미야애가': (310, '애', '예레미야애가'), '애가': (310, '애', '예레미야애가'),
+    '겔': (330, '겔', '에스겔'), '에스겔': (330, '겔', '에스겔'),
+    '단': (340, '단', '다니엘'), '다니엘': (340, '단', '다니엘'), '다니': (340, '단', '다니엘'),
+    '호': (350, '호', '호세아'), '호세아': (350, '호', '호세아'), '호세': (350, '호', '호세아'),
+    '욜': (360, '욜', '요엘'), '요엘': (360, '욜', '요엘'),
+    '암': (370, '암', '아모스'), '아모스': (370, '암', '아모스'),
+    '옵': (380, '옵', '오바댜'), '오바댜': (380, '옵', '오바댜'),
+    '욘': (390, '욘', '요나'), '요나': (390, '욘', '요나'),
+    '미': (400, '미', '미가'), '미가': (400, '미', '미가'),
+    '나': (410, '나', '나훔'), '나훔': (410, '나', '나훔'),
+    '합': (420, '합', '하박국'), '하박국': (420, '합', '하박국'), '하박': (420, '합', '하박국'),
+    '습': (430, '습', '스바냐'), '스바냐': (430, '습', '스바냐'),
+    '학': (440, '학', '학개'), '학개': (440, '학', '학개'),
+    '슥': (450, '슥', '스가랴'), '스가랴': (450, '슥', '스가랴'),
+    '말': (460, '말', '말라기'), '말라기': (460, '말', '말라기'), '말라': (460, '말', '말라기'),
+    '마': (470, '마', '마태복음'), '마태복음': (470, '마', '마태복음'), '마태': (470, '마', '마태복음'),
+    '막': (480, '막', '마가복음'), '마가복음': (480, '막', '마가복음'), '마가': (480, '막', '마가복음'),
+    '눅': (490, '눅', '누가복음'), '누가복음': (490, '눅', '누가복음'), '누가': (490, '눅', '누가복음'),
+    '요': (500, '요', '요한복음'), '요한복음': (500, '요', '요한복음'), '요한': (500, '요', '요한복음'),
+    '행': (510, '행', '사도행전'), '사도행전': (510, '행', '사도행전'), '사도': (510, '행', '사도행전'),
+    '롬': (520, '롬', '로마서'), '로마서': (520, '롬', '로마서'), '로마': (520, '롬', '로마서'),
+    '고전': (530, '고전', '고린도전서'), '고린도전서': (530, '고전', '고린도전서'),
+    '고후': (540, '고후', '고린도후서'), '고린도후서': (540, '고후', '고린도후서'),
+    '갈': (550, '갈', '갈라디아서'), '갈라디아서': (550, '갈', '갈라디아서'), '갈라': (550, '갈', '갈라디아서'),
+    '엡': (560, '엡', '에베소서'), '에베소서': (560, '엡', '에베소서'), '에베': (560, '엡', '에베소서'),
+    '빌': (570, '빌', '빌립보서'), '빌립보서': (570, '빌', '빌립보서'), '빌립': (570, '빌', '빌립보서'),
+    '골': (580, '골', '골로새서'), '골로새서': (580, '골', '골로새서'), '골로': (580, '골', '골로새서'),
+    '살전': (590, '살전', '데살로니가전서'), '데살로니가전서': (590, '살전', '데살로니가전서'),
+    '살후': (600, '살후', '데살로니가후서'), '데살로니가후서': (600, '살후', '데살로니가후서'),
+    '딤전': (610, '딤전', '디모데전서'), '디모데전서': (610, '딤전', '디모데전서'),
+    '딤후': (620, '딤후', '디모데후서'), '디모데후서': (620, '딤후', '디모데후서'),
+    '딛': (630, '딛', '디도서'), '디도서': (630, '딛', '디도서'), '디도': (630, '딛', '디도서'),
+    '몬': (640, '몬', '빌레몬서'), '빌레몬서': (640, '몬', '빌레몬서'), '빌레': (640, '몬', '빌레몬서'), '빌레몬': (640, '몬', '빌레몬서'),
+    '히': (650, '히', '히브리서'), '히브리서': (650, '히', '히브리서'), '히브': (650, '히', '히브리서'),
+    '약': (660, '약', '야고보서'), '야고보서': (660, '약', '야고보서'), '야고': (660, '약', '야고보서'),
+    '벧전': (670, '벧전', '베드로전서'), '베드로전서': (670, '벧전', '베드로전서'),
+    '벧후': (680, '벧후', '베드로후서'), '베드로후서': (680, '벧후', '베드로후서'),
+    '요일': (690, '요일', '요한1서'), '요한1서': (690, '요일', '요한1서'),
+    '요이': (700, '요이', '요한2서'), '요한2서': (700, '요이', '요한2서'), '요2서': (700, '요이', '요한2서'),
+    '요삼': (710, '요삼', '요한3서'), '요한3서': (710, '요삼', '요한3서'), '요3서': (710, '요삼', '요한3서'),
+    '유': (720, '유', '유다서'), '유다서': (720, '유', '유다서'), '유다': (720, '유', '유다서'),
+    '계': (730, '계', '요한계시록'), '요한계시록': (730, '계', '요한계시록'), '계시록': (730, '계', '요한계시록'), '계시': (730, '계', '요한계시록'),
+}
+
+ENGLISH_BOOK_MAP = {
+    'gen': 10, 'genesis': 10, 'exo': 20, 'exodus': 20, 'ex': 20,
+    'lev': 30, 'leviticus': 30, 'num': 40, 'numbers': 40,
+    'deu': 50, 'deut': 50, 'deuteronomy': 50,
+    'jos': 60, 'josh': 60, 'joshua': 60,
+    'jdg': 70, 'judg': 70, 'judges': 70, 'jud': 70,
+    'rut': 80, 'ruth': 80,
+    '1sa': 90, '1sam': 90, '1samuel': 90,
+    '2sa': 100, '2sam': 100, '2samuel': 100,
+    '1ki': 110, '1kgs': 110, '1kings': 110,
+    '2ki': 120, '2kgs': 120, '2kings': 120,
+    '1ch': 130, '1chr': 130, '1chronicles': 130,
+    '2ch': 140, '2chr': 140, '2chronicles': 140,
+    'ezr': 150, 'ezra': 150, 'neh': 160, 'nehemiah': 160,
+    'est': 190, 'esther': 190, 'job': 220,
+    'psa': 230, 'ps': 230, 'psalm': 230, 'psalms': 230,
+    'pro': 240, 'prov': 240, 'proverbs': 240,
+    'ecc': 250, 'eccl': 250, 'ecclesiastes': 250,
+    'sng': 260, 'song': 260, 'sos': 260, 'songofsolomon': 260,
+    'isa': 290, 'isaiah': 290, 'jer': 300, 'jeremiah': 300,
+    'lam': 310, 'lamentations': 310,
+    'eze': 330, 'ezek': 330, 'ezekiel': 330,
+    'dan': 340, 'daniel': 340, 'hos': 350, 'hosea': 350,
+    'joe': 360, 'joel': 360, 'amo': 370, 'amos': 370,
+    'oba': 380, 'obad': 380, 'obadiah': 380,
+    'jon': 390, 'jonah': 390, 'mic': 400, 'micah': 400,
+    'nah': 410, 'nahum': 410, 'hab': 420, 'habakkuk': 420,
+    'zep': 430, 'zeph': 430, 'zephaniah': 430,
+    'hag': 440, 'haggai': 440, 'zec': 450, 'zech': 450, 'zechariah': 450,
+    'mal': 460, 'malachi': 460,
+    'mat': 470, 'matt': 470, 'matthew': 470, 'mt': 470,
+    'mar': 480, 'mark': 480, 'mk': 480,
+    'luk': 490, 'luke': 490, 'lk': 490,
+    'joh': 500, 'john': 500, 'jn': 500,
+    'act': 510, 'acts': 510, 'rom': 520, 'romans': 520,
+    '1co': 530, '1cor': 530, '1corinthians': 530,
+    '2co': 540, '2cor': 540, '2corinthians': 540,
+    'gal': 550, 'galatians': 550, 'eph': 560, 'ephesians': 560,
+    'php': 570, 'phil': 570, 'philippians': 570,
+    'col': 580, 'colossians': 580,
+    '1th': 590, '1thess': 590, '1thessalonians': 590,
+    '2th': 600, '2thess': 600, '2thessalonians': 600,
+    '1ti': 610, '1tim': 610, '1timothy': 610,
+    '2ti': 620, '2tim': 620, '2timothy': 620,
+    'tit': 630, 'titus': 630,
+    'phm': 640, 'philemon': 640, 'phlm': 640,
+    'heb': 650, 'hebrews': 650, 'jas': 660, 'james': 660,
+    '1pe': 670, '1pet': 670, '1peter': 670,
+    '2pe': 680, '2pet': 680, '2peter': 680,
+    '1jo': 690, '1jn': 690, '1john': 690,
+    '2jo': 700, '2jn': 700, '2john': 700,
+    '3jo': 710, '3jn': 710, '3john': 710,
+    'jude': 720,
+    'rev': 730, 'revelation': 730, 'revelations': 730,
+}
+
+ENGLISH_VERSIONS = {'ESV', 'NKJV', 'NIV', 'KJV', 'NASB', 'NLT', 'RSV', 'ASV'}
+
+
+# ---------------------------------------------------------------------------
+# Hangul Assembler
+# ---------------------------------------------------------------------------
+
+def qwerty_to_jamo(text):
+    return [QWERTY_TO_HANGUL.get(c, c) for c in text]
+
+def is_choseong(j): return j in CHOSEONG
+def is_jungseong(j): return j in JUNGSEONG
+
+def assemble_hangul(jamo_list):
+    result = []
+    i = 0
+    while i < len(jamo_list):
+        j = jamo_list[i]
+        if is_choseong(j) and i + 1 < len(jamo_list) and is_jungseong(jamo_list[i + 1]):
+            cho = CHOSEONG.index(j)
+            i += 1
+            jung_char = jamo_list[i]
+            if i + 1 < len(jamo_list) and is_jungseong(jamo_list[i + 1]):
+                pair = (jung_char, jamo_list[i + 1])
+                if pair in COMPLEX_JUNGSEONG:
+                    jung_char = COMPLEX_JUNGSEONG[pair]
+                    i += 1
+            jung = JUNGSEONG.index(jung_char)
+            jong = 0
+            if i + 1 < len(jamo_list) and is_choseong(jamo_list[i + 1]):
+                potential_jong = jamo_list[i + 1]
+                if i + 2 < len(jamo_list) and is_jungseong(jamo_list[i + 2]):
+                    pass
+                elif potential_jong in JONGSEONG:
+                    if (i + 2 < len(jamo_list) and is_choseong(jamo_list[i + 2])
+                            and (potential_jong, jamo_list[i + 2]) in COMPLEX_JONGSEONG):
+                        if i + 3 < len(jamo_list) and is_jungseong(jamo_list[i + 3]):
+                            jong = JONGSEONG.index(potential_jong)
+                            i += 1
+                        else:
+                            complex_jong = COMPLEX_JONGSEONG[(potential_jong, jamo_list[i + 2])]
+                            jong = JONGSEONG.index(complex_jong)
+                            i += 2
+                    else:
+                        jong = JONGSEONG.index(potential_jong)
+                        i += 1
+            code = 0xAC00 + cho * 21 * 28 + jung * 28 + jong
+            result.append(chr(code))
+        else:
+            result.append(j)
+        i += 1
+    return ''.join(result)
+
+def convert_qwerty_to_hangul(text):
+    if all(c in QWERTY_TO_HANGUL for c in text):
+        jamo = qwerty_to_jamo(text)
+        return assemble_hangul(jamo)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Text Cleaning
+# ---------------------------------------------------------------------------
+
+def clean_text(text):
+    if not text:
+        return ''
+    # Remove footnote tags <f>...</f>
+    text = re.sub(r'<f>[^<]*</f>', '', text)
+    # Remove section title tags <n>...</n> and their bracket content
+    text = re.sub(r'<n>\[?[^\]<]*\]?</n>', '', text)
+    # Remove any remaining HTML tags
+    text = re.sub(r'<[^>]+/?>', '', text)
+    # Remove leftover bracketed section titles like [말씀이 육신이 되시다]
+    text = re.sub(r'\[[가-힣a-zA-Z0-9\s,.:]+\]\s*', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Engine - Reference Parser
+# ---------------------------------------------------------------------------
+
+class Engine:
+    VERSE_PATTERN = re.compile(
+        r'([가-힣a-zA-Z]+\d?[가-힣a-zA-Z]*)'
+        r'\s*'
+        r'(\d+)'
+        r'\s*(?:장\s*)?'
+        r'(?:'
+        r'[:：]\s*(\d+(?:\s*[-~]\s*\d+)?(?:\s*[,，]\s*\d+(?:\s*[-~]\s*\d+)?)*)'
+        r'|'
+        r'(?:편\s*)?(\d+)\s*절'
+        r')?'
+        r'(?:\s*절)?'
+    )
+
+    KOREAN_STYLE_PATTERN = re.compile(
+        r'([가-힣]+\d?[가-힣]*)'
+        r'\s*(\d+)\s*장'
+        r'(?:\s*(\d+(?:\s*[-~]\s*\d+)?(?:\s*[,，]\s*\d+(?:\s*[-~]\s*\d+)?)*)\s*절?)?'
+    )
+
+    ENGLISH_PATTERN = re.compile(
+        r'(\d?\s*[a-zA-Z]+)'
+        r'\s+'
+        r'(\d+)'
+        r'(?:'
+        r'[:]\s*(\d+(?:\s*[-~]\s*\d+)?(?:\s*[,]\s*\d+(?:\s*[-~]\s*\d+)?)*)'
+        r')?'
+    )
+
+    @staticmethod
+    def parse_verses(verse_str):
+        if not verse_str:
+            return []
+        verses = []
+        verse_str = verse_str.replace(' ', '')
+        parts = re.split(r'[,，]', verse_str)
+        for part in parts:
+            if '-' in part or '~' in part:
+                bounds = re.split(r'[-~]', part)
+                if len(bounds) == 2:
+                    start, end = int(bounds[0]), int(bounds[1])
+                    verses.extend(range(start, end + 1))
+            else:
+                verses.append(int(part))
+        return sorted(set(verses))
+
+    @staticmethod
+    def resolve_ambiguous_book(book_str, has_verse_separator):
+        if book_str == '요일': return KOREAN_BOOK_MAP['요일']
+        if book_str == '요이': return KOREAN_BOOK_MAP['요이']
+        if book_str == '요삼': return KOREAN_BOOK_MAP['요삼']
+        if book_str == '요':  return KOREAN_BOOK_MAP['요']
+        return None
+
+    @classmethod
+    def parse_reference(cls, text):
+        text = text.strip()
+        if not text:
+            return []
+        results = []
+
+        m = cls.KOREAN_STYLE_PATTERN.search(text)
+        if m:
+            book_str, chapter = m.group(1), int(m.group(2))
+            verse_str = m.group(3)
+            verses = cls.parse_verses(verse_str) if verse_str else []
+            book_info = cls._lookup_book(book_str, bool(verse_str))
+            if book_info:
+                results.append((*book_info, chapter, verses))
+                return results
+
+        m = cls.VERSE_PATTERN.search(text)
+        if m:
+            book_str, chapter = m.group(1), int(m.group(2))
+            verse_str = m.group(3) or m.group(4)
+            has_sep = m.group(3) is not None
+            verses = cls.parse_verses(verse_str) if verse_str else []
+            book_info = cls._lookup_book(book_str, has_sep)
+            if book_info:
+                results.append((*book_info, chapter, verses))
+                return results
+
+        m = cls.ENGLISH_PATTERN.search(text)
+        if m:
+            book_str, chapter = m.group(1).strip(), int(m.group(2))
+            verse_str = m.group(3)
+            verses = cls.parse_verses(verse_str) if verse_str else []
+            book_info = cls._lookup_english_book(book_str)
+            if book_info:
+                results.append((*book_info, chapter, verses))
+                return results
+        return results
+
+    @classmethod
+    def _lookup_book(cls, book_str, has_verse_separator=True):
+        if book_str in KOREAN_BOOK_MAP:
+            resolved = cls.resolve_ambiguous_book(book_str, has_verse_separator)
+            return resolved if resolved else KOREAN_BOOK_MAP[book_str]
+        converted = convert_qwerty_to_hangul(book_str)
+        if converted and converted in KOREAN_BOOK_MAP:
+            resolved = cls.resolve_ambiguous_book(converted, has_verse_separator)
+            return resolved if resolved else KOREAN_BOOK_MAP[converted]
+        return None
+
+    @classmethod
+    def _lookup_english_book(cls, book_str):
+        key = book_str.lower().replace(' ', '')
+        if key in ENGLISH_BOOK_MAP:
+            bn = ENGLISH_BOOK_MAP[key]
+            for v in KOREAN_BOOK_MAP.values():
+                if v[0] == bn:
+                    return v
+        return None
+
+
+# ---------------------------------------------------------------------------
+# BibleDB
+# ---------------------------------------------------------------------------
+
+class BibleDB:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.name = os.path.splitext(os.path.basename(db_path))[0]
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.is_english = self.name.upper() in ENGLISH_VERSIONS
+        self._load_info()
+        self._load_books()
+
+    def _load_info(self):
+        cur = self.conn.cursor()
+        cur.execute("SELECT name, value FROM info")
+        self.info = dict(cur.fetchall())
+        self.description = self.info.get('description', self.name)
+        self.language = self.info.get('language', 'ko')
+        if self.language == 'en':
+            self.is_english = True
+
+    def _load_books(self):
+        cur = self.conn.cursor()
+        cur.execute("SELECT book_number, short_name, long_name FROM books ORDER BY book_number")
+        self.books = {}
+        self.book_list = []
+        for bn, short, long_ in cur.fetchall():
+            self.books[bn] = (short, long_)
+            self.book_list.append((bn, short, long_))
+
+    def get_chapters(self, book_number):
+        cur = self.conn.cursor()
+        cur.execute("SELECT DISTINCT chapter FROM verses WHERE book_number=? ORDER BY chapter",
+                     (book_number,))
+        return [r[0] for r in cur.fetchall()]
+
+    def get_verses(self, book_number, chapter):
+        cur = self.conn.cursor()
+        cur.execute("SELECT verse, text FROM verses WHERE book_number=? AND chapter=? ORDER BY verse",
+                     (book_number, chapter))
+        return [(v, clean_text(t)) for v, t in cur.fetchall()]
+
+    def get_verse_text(self, book_number, chapter, verse):
+        cur = self.conn.cursor()
+        cur.execute("SELECT text FROM verses WHERE book_number=? AND chapter=? AND verse=?",
+                     (book_number, chapter, verse))
+        row = cur.fetchone()
+        return clean_text(row[0]) if row else ''
+
+    def close(self):
+        self.conn.close()
+
+    @property
+    def display_name(self):
+        return f"{self.description} [{self.name}]"
+
+
+# ---------------------------------------------------------------------------
+# Theme
+# ---------------------------------------------------------------------------
+
+LIGHT_THEME = {
+    'bg': '#FFFFFF', 'fg': '#1A1A2E',
+    'viewer_bg': '#FAFAFA', 'viewer_fg': '#1A1A2E',
+    'highlight_bg': '#FFE082', 'highlight_fg': '#1A1A2E',
+    'accent': '#1565C0', 'accent_hover': '#0D47A1',
+    'button_bg': '#E3F2FD', 'button_fg': '#1565C0', 'button_active': '#BBDEFB',
+    'frame_bg': '#F5F5F5',
+    'entry_bg': '#FFFFFF', 'entry_fg': '#1A1A2E',
+    'border': '#E0E0E0', 'verse_num': '#1565C0',
+    'status_bg': '#E8F5E9', 'status_fg': '#2E7D32',
+    'status_off_bg': '#FFEBEE', 'status_off_fg': '#C62828',
+    'separator': '#E0E0E0',
+    'listbox_bg': '#FFFFFF', 'listbox_fg': '#1A1A2E',
+    'listbox_sel_bg': '#BBDEFB', 'listbox_sel_fg': '#1A1A2E',
+    'preview_bg': '#F0F4FF', 'preview_fg': '#1A1A2E',
+    'radio_bg': '#F5F5F5', 'radio_fg': '#1A1A2E', 'radio_sel': '#FFFFFF',
+}
+
+DARK_THEME = {
+    'bg': '#1E1E2E', 'fg': '#CDD6F4',
+    'viewer_bg': '#181825', 'viewer_fg': '#CDD6F4',
+    'highlight_bg': '#F9E2AF', 'highlight_fg': '#1E1E2E',
+    'accent': '#89B4FA', 'accent_hover': '#74C7EC',
+    'button_bg': '#313244', 'button_fg': '#89B4FA', 'button_active': '#45475A',
+    'frame_bg': '#1E1E2E',
+    'entry_bg': '#313244', 'entry_fg': '#CDD6F4',
+    'border': '#45475A', 'verse_num': '#89B4FA',
+    'status_bg': '#313244', 'status_fg': '#A6E3A1',
+    'status_off_bg': '#313244', 'status_off_fg': '#F38BA8',
+    'separator': '#45475A',
+    'listbox_bg': '#313244', 'listbox_fg': '#CDD6F4',
+    'listbox_sel_bg': '#45475A', 'listbox_sel_fg': '#CDD6F4',
+    'preview_bg': '#11111B', 'preview_fg': '#CDD6F4',
+    'radio_bg': '#1E1E2E', 'radio_fg': '#CDD6F4', 'radio_sel': '#313244',
+}
+
+
+# ---------------------------------------------------------------------------
+# Formatter - builds output string based on settings
+# ---------------------------------------------------------------------------
+
+class Formatter:
+    """Generates formatted bible output text based on user settings."""
+
+    def __init__(self, settings, dbs=None):
+        self.s = settings  # dict of all settings
+        self.dbs = dbs or {}
+
+    def _foreign_book_name(self, book_num, want_english):
+        """Find a (short, long) name pair from a loaded DB matching the requested language."""
+        for db in self.dbs.values():
+            if db.is_english == want_english and book_num in db.books:
+                return db.books[book_num]
+        return None
+
+    def format_version_output(self, db, book_num, chapter, verses, all_verse_data):
+        """Format output for a single bible version.
+
+        Args:
+            db: BibleDB instance
+            book_num: book number
+            chapter: chapter number
+            verses: list of verse numbers
+            all_verse_data: list of (verse_num, text) tuples
+        Returns:
+            formatted string
+        """
+        s = self.s
+        is_eng = db.is_english
+
+        # --- Determine book display name (apply same setting to all versions) ---
+        db_short, db_long = db.books.get(book_num, ('?', '?'))
+        style = s['book_name']
+        if style in ('long_ko', 'short_ko'):
+            if is_eng:
+                foreign = self._foreign_book_name(book_num, want_english=False)
+                if foreign:
+                    f_short, f_long = foreign
+                    book_display = f_long if style == 'long_ko' else f_short
+                else:
+                    book_display = db_long if style == 'long_ko' else db_short
+            else:
+                book_display = db_long if style == 'long_ko' else db_short
+        elif style in ('long_en', 'short_en'):
+            if is_eng:
+                book_display = db_long if style == 'long_en' else db_short
+            else:
+                foreign = self._foreign_book_name(book_num, want_english=True)
+                if foreign:
+                    f_short, f_long = foreign
+                    book_display = f_long if style == 'long_en' else f_short
+                else:
+                    book_display = db_long if style == 'long_en' else db_short
+        else:
+            book_display = db_short
+
+        # --- Build reference string ---
+        range_sym = s.get('range_symbol', '-')
+        verse_list_str = self._format_verse_list(verses, range_sym) if verses else ''
+
+        if s['chapter_verse_format'] == 'korean':
+            if verse_list_str:
+                ref_str = f"{book_display} {chapter}장 {verse_list_str}절"
+            else:
+                ref_str = f"{book_display} {chapter}장"
+        else:
+            if verse_list_str:
+                ref_str = f"{book_display} {chapter}:{verse_list_str}"
+            else:
+                ref_str = f"{book_display} {chapter}"
+
+        # --- Build version header ---
+        version_header = ""
+        if s.get('show_version_header', True):
+            version_header = f"[{db.name}]"
+
+        # --- Build body ---
+        multiline = s['output_mode'] == 'newline'
+        show_chapterverse = s.get('newline_show_cv', False)
+
+        if multiline and len(all_verse_data) > 1:
+            lines = []
+            for v_num, v_text in all_verse_data:
+                if show_chapterverse:
+                    lines.append(f"{chapter}:{v_num} {v_text}")
+                else:
+                    lines.append(f"{v_num} {v_text}")
+            body = '\n'.join(lines)
+        else:
+            # inline - join all texts
+            body = ' '.join(text for _, text in all_verse_data)
+
+        # --- Assemble with brackets/position ---
+        hide_ref = s.get('hide_reference', False)
+        if hide_ref:
+            # Text only, no reference
+            if version_header:
+                return f"{version_header}\n{body}"
+            return body
+
+        # Bracket style
+        bracket = s.get('bracket_style', 'none')
+        if bracket == '[]':
+            ref_display = f"[{ref_str}]"
+        elif bracket == '()':
+            ref_display = f"({ref_str})"
+        else:
+            ref_display = ref_str
+
+        # Separator between ref and body
+        ref_sep = s.get('ref_body_separator', ' ')
+
+        # Position
+        position = s.get('ref_position', 'before')
+
+        if position == 'before':
+            if version_header:
+                main_line = f"{version_header} {ref_display}{ref_sep}{body}"
+            else:
+                main_line = f"{ref_display}{ref_sep}{body}"
+        else:  # after
+            if version_header:
+                main_line = f"{version_header} {body}{ref_sep}{ref_display}"
+            else:
+                main_line = f"{body}{ref_sep}{ref_display}"
+
+        return main_line
+
+    @staticmethod
+    def _format_verse_list(verses, range_sym='-'):
+        if not verses:
+            return ''
+        ranges = []
+        start = end = verses[0]
+        for v in verses[1:]:
+            if v == end + 1:
+                end = v
+            else:
+                ranges.append(f"{start}{range_sym}{end}" if start != end else str(start))
+                start = end = v
+        ranges.append(f"{start}{range_sym}{end}" if start != end else str(start))
+        return ','.join(ranges)
+
+
+# ---------------------------------------------------------------------------
+# Main Application
+# ---------------------------------------------------------------------------
+
+class AutoBibleApp:
+    DEFAULT_SETTINGS = {
+        'book_name': 'short_ko',        # short_ko, long_ko, short_en, long_en
+        'chapter_verse_format': 'colon', # colon, korean
+        'bracket_style': 'none',         # none, [], ()
+        'ref_position': 'before',        # before, after
+        'range_symbol': '-',             # -, ~
+        'ref_body_separator': ' ',       # ' ' (space), ' - ' (hyphen), ': ' (colon)
+        'show_version_header': True,
+        'hide_reference': False,
+        'output_mode': 'inline',         # inline, newline
+        'newline_show_cv': False,        # show chapter:verse on each line
+        'output_order': [],              # ordered list of version names
+        'viewer_versions': [],           # checked versions in viewer (ordered subset)
+        'viewer_version_order': [],      # full viewer ordering (checked + unchecked)
+        'viewer_font_size': 11,
+        'dark_mode': False,
+        'geometry': '1100x780',
+    }
+
+    def __init__(self, root):
+        self.root = root
+        self.root.title("AutoBible")
+        self.root.minsize(900, 650)
+
+        icon_path = os.path.join(BASE_DIR, "icon.ico")
+        if os.path.exists(icon_path):
+            try:
+                self.root.iconbitmap(icon_path)
+            except Exception:
+                pass
+
+        # State
+        self.bible_dbs = {}
+        self.monitoring = False
+        self.monitor_thread = None
+        self.last_clipboard = ''
+        self.settings = dict(self.DEFAULT_SETTINGS)
+
+        # Load databases
+        self._load_databases()
+
+        # Load settings
+        self._load_settings()
+
+        self.theme = DARK_THEME if self.settings['dark_mode'] else LIGHT_THEME
+
+        # Collect all themed widgets for easy re-theming
+        self._themed_widgets = []
+
+        # Build UI
+        self._build_ui()
+        self._apply_theme()
+
+        # Initial viewer load
+        if self.bible_dbs:
+            self._on_book_changed(None)
+
+        # Update preview
+        self._update_preview()
+
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # ---- Database ----
+
+    def _load_databases(self):
+        db_dir = os.path.join(BASE_DIR, BIBLE_DIR)
+        if not os.path.isdir(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            return
+        for fname in sorted(os.listdir(db_dir)):
+            if fname.lower().endswith(('.sqlite3', '.sqlite', '.db')):
+                path = os.path.join(db_dir, fname)
+                try:
+                    db = BibleDB(path)
+                    self.bible_dbs[db.name] = db
+                except Exception as e:
+                    print(f"Error loading {fname}: {e}")
+
+    def _refresh_databases(self):
+        """Rescan bible_versions folder for new DB files."""
+        db_dir = os.path.join(BASE_DIR, BIBLE_DIR)
+        if not os.path.isdir(db_dir):
+            return
+        existing = set(self.bible_dbs.keys())
+        for fname in sorted(os.listdir(db_dir)):
+            if fname.lower().endswith(('.sqlite3', '.sqlite', '.db')):
+                name = os.path.splitext(fname)[0]
+                if name not in existing:
+                    path = os.path.join(db_dir, fname)
+                    try:
+                        db = BibleDB(path)
+                        self.bible_dbs[db.name] = db
+                    except Exception:
+                        pass
+        # Update available list
+        self._refresh_available_list()
+
+    # ---- Settings ----
+
+    def _load_settings(self):
+        path = os.path.join(BASE_DIR, SETTINGS_FILE)
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    saved = json.load(f)
+                for k, v in saved.items():
+                    if k in self.settings:
+                        self.settings[k] = v
+                geo = self.settings.get('geometry', '1100x780')
+                self.root.geometry(geo)
+            except Exception:
+                self.root.geometry('1100x780')
+        else:
+            self.root.geometry('1100x780')
+
+        # Validate output_order
+        valid_order = [n for n in self.settings['output_order'] if n in self.bible_dbs]
+        self.settings['output_order'] = valid_order
+
+        # Validate viewer_versions; default to one Korean (or first available) if empty
+        valid_viewer = [n for n in self.settings.get('viewer_versions', []) if n in self.bible_dbs]
+        if not valid_viewer and self.bible_dbs:
+            versions = list(self.bible_dbs.keys())
+            korean_pref = [v for v in versions if v in ('NRKV', 'KRV', 'KNRSV')]
+            valid_viewer = [korean_pref[0] if korean_pref else versions[0]]
+        self.settings['viewer_versions'] = valid_viewer
+
+        # Validate viewer_version_order: must contain all loaded DBs in some order.
+        saved_order = [n for n in self.settings.get('viewer_version_order', []) if n in self.bible_dbs]
+        # Append any DBs missing from saved order (new files since last run)
+        for n in self.bible_dbs:
+            if n not in saved_order:
+                saved_order.append(n)
+        # Ensure checked versions appear in the order they were saved as checked
+        if not saved_order:
+            saved_order = list(self.bible_dbs.keys())
+        self.settings['viewer_version_order'] = saved_order
+
+        # Clamp font size
+        try:
+            self.settings['viewer_font_size'] = int(self.settings.get('viewer_font_size', 11))
+        except (TypeError, ValueError):
+            self.settings['viewer_font_size'] = 11
+        self.settings['viewer_font_size'] = max(8, min(30, self.settings['viewer_font_size']))
+
+    def _save_settings(self):
+        self.settings['geometry'] = self.root.geometry()
+        path = os.path.join(BASE_DIR, SETTINGS_FILE)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(self.settings, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _get_format_settings(self):
+        """Read current UI state into settings dict."""
+        return dict(self.settings)
+
+    # ---- UI ----
+
+    def _build_ui(self):
+        self.main_frame = tk.Frame(self.root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Top bar
+        self._build_top_bar()
+
+        # Notebook (tabs)
+        self.notebook = ttk.Notebook(self.main_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+
+        # Tab 1: Bible Viewer
+        self.tab_viewer = tk.Frame(self.notebook)
+        self.notebook.add(self.tab_viewer, text='  성경 보기  ')
+
+        # Tab 2: Settings
+        self.tab_settings = tk.Frame(self.notebook)
+        self.notebook.add(self.tab_settings, text='  출력 설정  ')
+
+        self._build_viewer_tab()
+        self._build_settings_tab()
+
+    def _build_top_bar(self):
+        self.top_bar = tk.Frame(self.main_frame, height=48)
+        self.top_bar.pack(fill=tk.X, padx=8, pady=6)
+
+        self.title_label = tk.Label(self.top_bar, text="AutoBible",
+                                      font=('Segoe UI', 16, 'bold'))
+        self.title_label.pack(side=tk.LEFT, padx=(4, 20))
+
+        self.monitor_btn = tk.Button(
+            self.top_bar, text="  모니터링 시작  ", font=('Segoe UI', 10),
+            relief=tk.FLAT, cursor='hand2', command=self._toggle_monitoring)
+        self.monitor_btn.pack(side=tk.LEFT, padx=4)
+
+        self.status_label = tk.Label(self.top_bar, text=" 대기 중 ",
+                                       font=('Segoe UI', 9), padx=8, pady=2)
+        self.status_label.pack(side=tk.LEFT, padx=8)
+
+        self.dark_btn = tk.Button(
+            self.top_bar, text="  다크 모드  ", font=('Segoe UI', 9),
+            relief=tk.FLAT, cursor='hand2', command=self._toggle_dark_mode)
+        self.dark_btn.pack(side=tk.RIGHT, padx=4)
+
+    # ---- Viewer Tab ----
+
+    def _build_viewer_tab(self):
+        # Left: log, Right: viewer
+        pw = tk.PanedWindow(self.tab_viewer, orient=tk.HORIZONTAL, sashwidth=4)
+        pw.pack(fill=tk.BOTH, expand=True)
+        self.viewer_pane = pw
+
+        # Left - activity log
+        left = tk.Frame(pw)
+        pw.add(left, minsize=220, stretch="never")
+        self.log_frame = left
+
+        log_lbl = tk.Label(left, text="활동 로그", font=('Segoe UI', 10, 'bold'))
+        log_lbl.pack(anchor=tk.W, padx=8, pady=(8, 4))
+        self._log_label = log_lbl
+
+        log_inner = tk.Frame(left)
+        log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self.log_text = tk.Text(log_inner, font=('Consolas', 9), wrap=tk.WORD,
+                                  state=tk.DISABLED, width=30)
+        self.log_scroll = tk.Scrollbar(log_inner, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=self.log_scroll.set)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Right - bible viewer
+        right = tk.Frame(pw)
+        pw.add(right, minsize=400, stretch="always")
+        self.viewer_outer = right
+
+        # Version chip bar (multi-version parallel view + reorder)
+        version_bar = tk.Frame(right)
+        version_bar.pack(fill=tk.X, padx=4, pady=(4, 0))
+        self.version_bar = version_bar
+
+        tk.Label(version_bar, text="버전:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+
+        self.chip_frame = tk.Frame(version_bar)
+        self.chip_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Label(version_bar, text="(클릭: 토글, 드래그: 순서 변경)",
+                 font=('Segoe UI', 8)).pack(side=tk.LEFT, padx=(8, 0))
+
+        # Initialize ordered viewer state from settings
+        self._viewer_order = list(self.settings['viewer_version_order'])
+        self._viewer_checked = set(self.settings['viewer_versions'])
+        self._viewer_focused = self._viewer_order[0] if self._viewer_order else None
+        self.viewer_chip_widgets = {}  # name -> outer Frame
+        self.viewer_chip_labels = {}   # name -> inner Label
+        self._render_viewer_versions()
+
+        # Navigation
+        nav = tk.Frame(right)
+        nav.pack(fill=tk.X, padx=4, pady=(4, 0))
+        self.nav_frame = nav
+
+        tk.Label(nav, text="책:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+        self.book_var = tk.StringVar()
+        self.book_combo = ttk.Combobox(nav, textvariable=self.book_var,
+                                        state='readonly', width=14)
+        self.book_combo.pack(side=tk.LEFT, padx=(0, 8))
+        self.book_combo.bind('<<ComboboxSelected>>', self._on_book_changed)
+
+        tk.Label(nav, text="장:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+        self.chapter_var = tk.StringVar()
+        self.chapter_combo = ttk.Combobox(nav, textvariable=self.chapter_var,
+                                            state='readonly', width=5)
+        self.chapter_combo.pack(side=tk.LEFT, padx=(0, 8))
+        self.chapter_combo.bind('<<ComboboxSelected>>', self._on_chapter_changed)
+
+        self.prev_btn = tk.Button(nav, text=" < ", font=('Segoe UI', 9),
+                                    relief=tk.FLAT, cursor='hand2', command=self._prev_chapter)
+        self.prev_btn.pack(side=tk.LEFT, padx=2)
+        self.next_btn = tk.Button(nav, text=" > ", font=('Segoe UI', 9),
+                                    relief=tk.FLAT, cursor='hand2', command=self._next_chapter)
+        self.next_btn.pack(side=tk.LEFT, padx=2)
+
+        tk.Label(nav, text="절:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(12, 4))
+        self.verse_jump_var = tk.StringVar()
+        self.verse_jump_entry = tk.Entry(nav, textvariable=self.verse_jump_var,
+                                           width=5, font=('Segoe UI', 9))
+        self.verse_jump_entry.pack(side=tk.LEFT, padx=(0, 4))
+        self.verse_jump_entry.bind('<Return>', self._on_verse_jump)
+        self.jump_btn = tk.Button(nav, text="이동", font=('Segoe UI', 9),
+                                    relief=tk.FLAT, cursor='hand2',
+                                    command=lambda: self._on_verse_jump(None))
+        self.jump_btn.pack(side=tk.LEFT)
+
+        # Font size controls (rightmost)
+        self.font_plus_btn = tk.Button(nav, text=" A+ ", font=('Segoe UI', 9),
+                                         relief=tk.FLAT, cursor='hand2',
+                                         command=lambda: self._change_font_size(1))
+        self.font_plus_btn.pack(side=tk.RIGHT, padx=2)
+        self.font_minus_btn = tk.Button(nav, text=" A- ", font=('Segoe UI', 9),
+                                          relief=tk.FLAT, cursor='hand2',
+                                          command=lambda: self._change_font_size(-1))
+        self.font_minus_btn.pack(side=tk.RIGHT, padx=2)
+
+        # Text
+        tf = tk.Frame(right)
+        tf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.viewer_text_frame = tf
+
+        self.viewer_text = tk.Text(tf, font=('Malgun Gothic', 11), wrap=tk.WORD,
+                                     state=tk.DISABLED, spacing1=2, spacing3=2, padx=12, pady=8)
+        self.viewer_scroll = tk.Scrollbar(tf, command=self.viewer_text.yview)
+        self.viewer_text.configure(yscrollcommand=self.viewer_scroll.set)
+        self.viewer_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.viewer_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._apply_viewer_font()
+
+        # Click/drag → copy formatted; Ctrl+wheel → font size
+        self.viewer_text.bind('<ButtonRelease-1>', self._on_viewer_text_release)
+        self.viewer_text.bind('<Control-MouseWheel>', self._on_ctrl_wheel)
+
+        self._populate_books()
+
+    # ---- Settings Tab ----
+
+    def _build_settings_tab(self):
+        # Two columns: left = version order, right = format settings + preview
+        pw = tk.PanedWindow(self.tab_settings, orient=tk.HORIZONTAL, sashwidth=4)
+        pw.pack(fill=tk.BOTH, expand=True)
+        self.settings_pane = pw
+
+        # ===== LEFT: Version selection & ordering =====
+        left = tk.Frame(pw)
+        pw.add(left, minsize=400, stretch="never")
+        self.settings_left = left
+
+        # Title
+        lbl = tk.Label(left, text="성경 버전 선택 / 출력 순서",
+                        font=('Segoe UI', 10, 'bold'))
+        lbl.pack(anchor=tk.W, padx=8, pady=(8, 4))
+
+        # Dual listbox area
+        dual_frame = tk.Frame(left)
+        dual_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
+
+        # Available list
+        avail_frame = tk.Frame(dual_frame)
+        avail_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tk.Label(avail_frame, text="성경 목록", font=('Segoe UI', 9)).pack(anchor=tk.W)
+        self.avail_listbox = tk.Listbox(avail_frame, font=('Segoe UI', 9),
+                                          selectmode=tk.EXTENDED, height=10)
+        self.avail_listbox.pack(fill=tk.BOTH, expand=True)
+
+        # Buttons between lists
+        btn_frame = tk.Frame(dual_frame)
+        btn_frame.pack(side=tk.LEFT, padx=8, pady=20)
+        self.add_btn = tk.Button(btn_frame, text=" 추가 → ", font=('Segoe UI', 9),
+                                   relief=tk.FLAT, cursor='hand2', command=self._add_to_order)
+        self.add_btn.pack(pady=4)
+        self.remove_btn = tk.Button(btn_frame, text=" ← 제거 ", font=('Segoe UI', 9),
+                                      relief=tk.FLAT, cursor='hand2', command=self._remove_from_order)
+        self.remove_btn.pack(pady=4)
+        self.refresh_btn = tk.Button(btn_frame, text="새로고침", font=('Segoe UI', 9),
+                                       relief=tk.FLAT, cursor='hand2', command=self._refresh_databases)
+        self.refresh_btn.pack(pady=(12, 4))
+
+        # Order list
+        order_frame = tk.Frame(dual_frame)
+        order_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tk.Label(order_frame, text="성경 출력 순서", font=('Segoe UI', 9)).pack(anchor=tk.W)
+        self.order_listbox = tk.Listbox(order_frame, font=('Segoe UI', 9),
+                                          selectmode=tk.SINGLE, height=10)
+        self.order_listbox.pack(fill=tk.BOTH, expand=True)
+
+        # Order control buttons
+        order_btn_frame = tk.Frame(left)
+        order_btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+        self.up_btn = tk.Button(order_btn_frame, text=" ▲ 위로 ", font=('Segoe UI', 9),
+                                  relief=tk.FLAT, cursor='hand2', command=self._move_up)
+        self.up_btn.pack(side=tk.LEFT, padx=4)
+        self.down_btn = tk.Button(order_btn_frame, text=" ▼ 아래로 ", font=('Segoe UI', 9),
+                                    relief=tk.FLAT, cursor='hand2', command=self._move_down)
+        self.down_btn.pack(side=tk.LEFT, padx=4)
+        self.clear_btn = tk.Button(order_btn_frame, text=" 모두 제거 ", font=('Segoe UI', 9),
+                                     relief=tk.FLAT, cursor='hand2', command=self._clear_order)
+        self.clear_btn.pack(side=tk.RIGHT, padx=4)
+
+        # Populate lists
+        self._refresh_available_list()
+        for name in self.settings['output_order']:
+            if name in self.bible_dbs:
+                self.order_listbox.insert(tk.END, self.bible_dbs[name].display_name)
+
+        # ===== RIGHT: Format settings + preview =====
+        right = tk.Frame(pw)
+        pw.add(right, minsize=420, stretch="always")
+        self.settings_right = right
+
+        # Scrollable settings area
+        canvas = tk.Canvas(right, highlightthickness=0)
+        scrollbar = tk.Scrollbar(right, orient=tk.VERTICAL, command=canvas.yview)
+        self.settings_scroll_frame = tk.Frame(canvas)
+        self.settings_canvas = canvas
+        self.settings_scrollbar = scrollbar
+
+        self.settings_scroll_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.settings_scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Enable mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel, add='+')
+
+        sf = self.settings_scroll_frame  # shorthand
+
+        # --- 표기 설정 (한국어 버전용) ---
+        tk.Label(sf, text="표기 설정 (한국어 버전용)", font=('Segoe UI', 10, 'bold')).pack(
+            anchor=tk.W, padx=8, pady=(8, 4))
+        tk.Label(sf, text="※ 영어 성경(ESV/NKJV 등)은 항상 영어식+하이픈으로 출력됩니다.",
+                 font=('Segoe UI', 8)).pack(anchor=tk.W, padx=12)
+
+        # Book name style
+        f1 = tk.LabelFrame(sf, text=" 책 이름 ", font=('Segoe UI', 9))
+        f1.pack(fill=tk.X, padx=12, pady=4)
+        self.book_name_var = tk.StringVar(value=self.settings['book_name'])
+        for val, txt in [('long_ko', '한글 정식'), ('short_ko', '한글 약칭'),
+                         ('long_en', '영문 정식'), ('short_en', '영문 약칭')]:
+            rb = tk.Radiobutton(f1, text=txt, variable=self.book_name_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Chapter:Verse format
+        f2 = tk.LabelFrame(sf, text=" 장절 표기 ", font=('Segoe UI', 9))
+        f2.pack(fill=tk.X, padx=12, pady=4)
+        self.cv_format_var = tk.StringVar(value=self.settings['chapter_verse_format'])
+        for val, txt in [('colon', '1:1'), ('korean', '1장 1절')]:
+            rb = tk.Radiobutton(f2, text=txt, variable=self.cv_format_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Bracket style
+        f3 = tk.LabelFrame(sf, text=" 괄호 ", font=('Segoe UI', 9))
+        f3.pack(fill=tk.X, padx=12, pady=4)
+        self.bracket_var = tk.StringVar(value=self.settings['bracket_style'])
+        for val, txt in [('none', '없음'), ('[]', '[ ]'), ('()', '( )')]:
+            rb = tk.Radiobutton(f3, text=txt, variable=self.bracket_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Reference position
+        f4 = tk.LabelFrame(sf, text=" 표기 위치 ", font=('Segoe UI', 9))
+        f4.pack(fill=tk.X, padx=12, pady=4)
+        self.position_var = tk.StringVar(value=self.settings['ref_position'])
+        for val, txt in [('before', '본문 앞'), ('after', '본문 뒤')]:
+            rb = tk.Radiobutton(f4, text=txt, variable=self.position_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Range symbol
+        f5 = tk.LabelFrame(sf, text=" 범위 연결 기호 ", font=('Segoe UI', 9))
+        f5.pack(fill=tk.X, padx=12, pady=4)
+        self.range_var = tk.StringVar(value=self.settings['range_symbol'])
+        for val, txt in [('-', '-'), ('~', '~')]:
+            rb = tk.Radiobutton(f5, text=txt, variable=self.range_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Ref-body separator
+        f6 = tk.LabelFrame(sf, text=" 레퍼런스-본문 구분 기호 ", font=('Segoe UI', 9))
+        f6.pack(fill=tk.X, padx=12, pady=4)
+        self.sep_var = tk.StringVar(value=self.settings['ref_body_separator'])
+        for val, txt in [(' - ', '하이픈 (-)'), (': ', '콜론 (:)'), (' ', '띄어쓰기')]:
+            rb = tk.Radiobutton(f6, text=txt, variable=self.sep_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Output mode
+        f7 = tk.LabelFrame(sf, text=" 다절 출력 방식 ", font=('Segoe UI', 9))
+        f7.pack(fill=tk.X, padx=12, pady=4)
+        self.output_mode_var = tk.StringVar(value=self.settings['output_mode'])
+        for val, txt in [('inline', '여러 절을 한 줄로'), ('newline', '각 절을 줄마다')]:
+            rb = tk.Radiobutton(f7, text=txt, variable=self.output_mode_var, value=val,
+                                font=('Segoe UI', 9), command=self._on_setting_changed)
+            rb.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Newline sub-option: show chapter:verse
+        self.newline_cv_var = tk.BooleanVar(value=self.settings['newline_show_cv'])
+        self.newline_cv_check = tk.Checkbutton(
+            f7, text='줄마다 장:절 표시', variable=self.newline_cv_var,
+            font=('Segoe UI', 9), command=self._on_setting_changed)
+        self.newline_cv_check.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Misc checkboxes
+        f8 = tk.LabelFrame(sf, text=" 기타 ", font=('Segoe UI', 9))
+        f8.pack(fill=tk.X, padx=12, pady=4)
+        self.version_header_var = tk.BooleanVar(value=self.settings['show_version_header'])
+        cb1 = tk.Checkbutton(f8, text='버전 헤더 출력', variable=self.version_header_var,
+                             font=('Segoe UI', 9), command=self._on_setting_changed)
+        cb1.pack(side=tk.LEFT, padx=8, pady=4)
+        self.hide_ref_var = tk.BooleanVar(value=self.settings['hide_reference'])
+        cb2 = tk.Checkbutton(f8, text='장절 표기 숨기기 (본문만)', variable=self.hide_ref_var,
+                             font=('Segoe UI', 9), command=self._on_setting_changed)
+        cb2.pack(side=tk.LEFT, padx=8, pady=4)
+
+        # Separator
+        tk.Frame(sf, height=2, bg='#CCCCCC').pack(fill=tk.X, padx=8, pady=8)
+
+        # Preview
+        preview_header = tk.Frame(sf)
+        preview_header.pack(fill=tk.X, padx=8)
+        tk.Label(preview_header, text="미리보기 (예시: 요 1:1-3)",
+                 font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT)
+        self.preview_refresh_btn = tk.Button(
+            preview_header, text="미리보기 새로고침", font=('Segoe UI', 8),
+            relief=tk.FLAT, cursor='hand2', command=self._update_preview)
+        self.preview_refresh_btn.pack(side=tk.RIGHT)
+
+        self.preview_text = tk.Text(sf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+                                      height=12, state=tk.DISABLED, padx=8, pady=8)
+        self.preview_text.pack(fill=tk.BOTH, expand=True, padx=12, pady=(4, 12))
+
+        # Collect all labelframes and their children for theming
+        self._settings_labelframes = [f1, f2, f3, f4, f5, f6, f7, f8]
+        self._settings_header_labels = []
+        for w in sf.winfo_children():
+            if isinstance(w, tk.Label):
+                self._settings_header_labels.append(w)
+
+    # ---- Version order management ----
+
+    def _refresh_available_list(self):
+        self.avail_listbox.delete(0, tk.END)
+        # Show all DBs that are NOT in the order list
+        order_names = self._get_order_names()
+        for name, db in self.bible_dbs.items():
+            if name not in order_names:
+                self.avail_listbox.insert(tk.END, db.display_name)
+
+    def _get_order_names(self):
+        """Get version names from order listbox."""
+        names = []
+        for i in range(self.order_listbox.size()):
+            display = self.order_listbox.get(i)
+            # Extract name from "description [NAME]"
+            m = re.search(r'\[(\w+)\]', display)
+            if m:
+                names.append(m.group(1))
+        return names
+
+    def _display_to_name(self, display_str):
+        m = re.search(r'\[(\w+)\]', display_str)
+        return m.group(1) if m else None
+
+    def _add_to_order(self):
+        sel = self.avail_listbox.curselection()
+        if not sel:
+            return
+        for i in sorted(sel, reverse=True):
+            display = self.avail_listbox.get(i)
+            self.order_listbox.insert(tk.END, display)
+            self.avail_listbox.delete(i)
+        self._sync_order_to_settings()
+        self._update_preview()
+
+    def _remove_from_order(self):
+        sel = self.order_listbox.curselection()
+        if not sel:
+            return
+        for i in sorted(sel, reverse=True):
+            display = self.order_listbox.get(i)
+            self.order_listbox.delete(i)
+            self.avail_listbox.insert(tk.END, display)
+        self._sync_order_to_settings()
+        self._update_preview()
+
+    def _move_up(self):
+        sel = self.order_listbox.curselection()
+        if not sel or sel[0] == 0:
+            return
+        idx = sel[0]
+        text = self.order_listbox.get(idx)
+        self.order_listbox.delete(idx)
+        self.order_listbox.insert(idx - 1, text)
+        self.order_listbox.selection_set(idx - 1)
+        self._sync_order_to_settings()
+        self._update_preview()
+        self._apply_listbox_theme()
+
+    def _move_down(self):
+        sel = self.order_listbox.curselection()
+        if not sel or sel[0] >= self.order_listbox.size() - 1:
+            return
+        idx = sel[0]
+        text = self.order_listbox.get(idx)
+        self.order_listbox.delete(idx)
+        self.order_listbox.insert(idx + 1, text)
+        self.order_listbox.selection_set(idx + 1)
+        self._sync_order_to_settings()
+        self._update_preview()
+        self._apply_listbox_theme()
+
+    def _clear_order(self):
+        while self.order_listbox.size() > 0:
+            display = self.order_listbox.get(0)
+            self.order_listbox.delete(0)
+            self.avail_listbox.insert(tk.END, display)
+        self._sync_order_to_settings()
+        self._update_preview()
+
+    def _sync_order_to_settings(self):
+        self.settings['output_order'] = self._get_order_names()
+        self._save_settings()
+
+    # ---- Setting changed callback ----
+
+    def _on_setting_changed(self):
+        self.settings['book_name'] = self.book_name_var.get()
+        self.settings['chapter_verse_format'] = self.cv_format_var.get()
+        self.settings['bracket_style'] = self.bracket_var.get()
+        self.settings['ref_position'] = self.position_var.get()
+        self.settings['range_symbol'] = self.range_var.get()
+        self.settings['ref_body_separator'] = self.sep_var.get()
+        self.settings['output_mode'] = self.output_mode_var.get()
+        self.settings['newline_show_cv'] = self.newline_cv_var.get()
+        self.settings['show_version_header'] = self.version_header_var.get()
+        self.settings['hide_reference'] = self.hide_ref_var.get()
+        self._save_settings()
+        self._update_preview()
+
+    # ---- Preview ----
+
+    def _update_preview(self):
+        """Generate preview using John 1:1-3."""
+        self.preview_text.configure(state=tk.NORMAL)
+        self.preview_text.delete('1.0', tk.END)
+
+        order = self.settings['output_order']
+        if not order:
+            self.preview_text.insert(tk.END, "(출력할 성경 버전을 추가하세요)")
+            self.preview_text.configure(state=tk.DISABLED)
+            return
+
+        book_num = 500  # 요한복음
+        chapter = 1
+        verses = [1, 2, 3]
+
+        fmt = Formatter(self.settings, self.bible_dbs)
+        parts = []
+        for ver_name in order:
+            if ver_name not in self.bible_dbs:
+                continue
+            db = self.bible_dbs[ver_name]
+            if book_num not in db.books:
+                continue
+            verse_data = [(v, db.get_verse_text(book_num, chapter, v)) for v in verses]
+            verse_data = [(v, t) for v, t in verse_data if t]
+            if not verse_data:
+                continue
+            text = fmt.format_version_output(db, book_num, chapter, verses, verse_data)
+            if text:
+                parts.append(text)
+
+        result = '\n\n'.join(parts) if parts else "(데이터를 찾을 수 없습니다)"
+        self.preview_text.insert(tk.END, result)
+        self.preview_text.configure(state=tk.DISABLED)
+
+    # ---- Viewer navigation ----
+
+    # ---- Viewer version chips / ordering ----
+
+    def _render_viewer_versions(self):
+        """(Re)build the chip row according to self._viewer_order."""
+        for w in self.chip_frame.winfo_children():
+            w.destroy()
+        self.viewer_chip_widgets = {}
+        self.viewer_chip_labels = {}
+        for name in self._viewer_order:
+            self._build_chip(name)
+        self._highlight_focused_chip()
+        self._apply_viewer_chip_theme()
+
+    def _build_chip(self, name):
+        is_checked = name in self._viewer_checked
+        outer = tk.Frame(self.chip_frame, relief=tk.SOLID, borderwidth=1,
+                         padx=8, pady=3, cursor='fleur')
+        label_text = f"{'☑' if is_checked else '☐'} {name}"
+        lbl = tk.Label(outer, text=label_text, font=('Segoe UI', 9), cursor='fleur')
+        lbl.pack()
+        outer.pack(side=tk.LEFT, padx=3, pady=2)
+        self.viewer_chip_widgets[name] = outer
+        self.viewer_chip_labels[name] = lbl
+
+        # Per-chip drag state
+        state = {'press_x': 0, 'press_y': 0, 'dragging': False}
+
+        def on_press(event):
+            state['press_x'] = event.x_root
+            state['press_y'] = event.y_root
+            state['dragging'] = False
+            self._set_viewer_focused(name)
+
+        def on_motion(event):
+            dx = abs(event.x_root - state['press_x'])
+            dy = abs(event.y_root - state['press_y'])
+            if not state['dragging'] and (dx > 4 or dy > 4):
+                state['dragging'] = True
+                outer.configure(relief=tk.SUNKEN)
+            if state['dragging']:
+                self._show_drop_indicator(name, event.x_root)
+
+        def on_release(event):
+            if state['dragging']:
+                outer.configure(relief=tk.SOLID)
+                pos = self._get_drop_position(event.x_root)
+                self._clear_drop_indicator()
+                if pos:
+                    tgt_name, drop_after = pos
+                    self._reorder_drop(name, tgt_name, drop_after)
+            else:
+                self._on_viewer_check_toggle(name)
+
+        for w in (outer, lbl):
+            w.bind('<ButtonPress-1>', on_press)
+            w.bind('<B1-Motion>', on_motion)
+            w.bind('<ButtonRelease-1>', on_release)
+
+    def _set_viewer_focused(self, name):
+        self._viewer_focused = name
+        self._highlight_focused_chip()
+
+    def _highlight_focused_chip(self):
+        t = getattr(self, 'theme', None)
+        if not t:
+            return
+        accent = t['accent']
+        border = t['border']
+        for n, w in self.viewer_chip_widgets.items():
+            if n == self._viewer_focused:
+                w.configure(highlightthickness=2,
+                            highlightbackground=accent, highlightcolor=accent)
+            else:
+                w.configure(highlightthickness=0,
+                            highlightbackground=border, highlightcolor=border)
+
+    def _on_viewer_check_toggle(self, name):
+        if name in self._viewer_checked:
+            self._viewer_checked.discard(name)
+        else:
+            self._viewer_checked.add(name)
+        self._viewer_focused = name
+        self._save_viewer_state()
+        self._render_viewer_versions()
+        self._populate_books()
+        self._on_book_changed(None)
+
+    # ---- Drag-drop helpers ----
+
+    def _get_drop_position(self, x_root):
+        """Return (target_name, drop_after_target) for cursor x position, or None."""
+        chips = [(n, self.viewer_chip_widgets[n]) for n in self._viewer_order
+                 if n in self.viewer_chip_widgets]
+        if not chips:
+            return None
+        for n, w in chips:
+            try:
+                wx = w.winfo_rootx()
+                ww = w.winfo_width()
+            except tk.TclError:
+                continue
+            if wx <= x_root <= wx + ww:
+                return n, x_root > (wx + ww / 2)
+        # Outside any chip — clamp to ends.
+        try:
+            first_n, first_w = chips[0]
+            last_n, last_w = chips[-1]
+            if x_root < first_w.winfo_rootx():
+                return first_n, False
+            return last_n, True
+        except tk.TclError:
+            return None
+
+    def _show_drop_indicator(self, dragged_name, x_root):
+        pos = self._get_drop_position(x_root)
+        if not pos:
+            self._clear_drop_indicator()
+            return
+        tgt_name, _ = pos
+        if tgt_name == dragged_name:
+            self._clear_drop_indicator()
+            return
+        accent = self.theme['accent']
+        border = self.theme['border']
+        for n, w in self.viewer_chip_widgets.items():
+            if n == tgt_name:
+                w.configure(highlightthickness=2,
+                            highlightbackground=accent, highlightcolor=accent)
+            elif n == self._viewer_focused:
+                w.configure(highlightthickness=2,
+                            highlightbackground=accent, highlightcolor=accent)
+            else:
+                w.configure(highlightthickness=0,
+                            highlightbackground=border, highlightcolor=border)
+
+    def _clear_drop_indicator(self):
+        self._highlight_focused_chip()
+
+    def _reorder_drop(self, src, target, drop_after):
+        if src == target or src not in self._viewer_order or target not in self._viewer_order:
+            return
+        self._viewer_order.remove(src)
+        tgt_idx = self._viewer_order.index(target)
+        insert_idx = tgt_idx + 1 if drop_after else tgt_idx
+        self._viewer_order.insert(insert_idx, src)
+        self._save_viewer_state()
+        self._render_viewer_versions()
+        self._load_chapter()
+
+    def _save_viewer_state(self):
+        self.settings['viewer_version_order'] = list(self._viewer_order)
+        self.settings['viewer_versions'] = [n for n in self._viewer_order if n in self._viewer_checked]
+        self._save_settings()
+
+    def _checked_in_order(self):
+        return [n for n in self._viewer_order if n in self._viewer_checked]
+
+    def _get_primary_version(self):
+        """First checked version, used to populate book/chapter dropdowns."""
+        for name in self._viewer_order:
+            if name in self._viewer_checked:
+                return name
+        return None
+
+    def _populate_books(self):
+        primary = self._get_primary_version()
+        if not primary or primary not in self.bible_dbs:
+            self.book_combo['values'] = []
+            self._book_number_map = {}
+            return
+        db = self.bible_dbs[primary]
+        book_names = [f"{long_} ({short})" for bn, short, long_ in db.book_list]
+        self._book_number_map = {f"{long_} ({short})": bn for bn, short, long_ in db.book_list}
+        self.book_combo['values'] = book_names
+        current = self.book_var.get()
+        if current in book_names:
+            return
+        if book_names:
+            self.book_var.set(book_names[0])
+
+    def _on_book_changed(self, event):
+        primary = self._get_primary_version()
+        book_name = self.book_var.get()
+        if not primary or not book_name or primary not in self.bible_dbs:
+            self.viewer_text.configure(state=tk.NORMAL)
+            self.viewer_text.delete('1.0', tk.END)
+            self.viewer_text.configure(state=tk.DISABLED)
+            return
+        bn = self._book_number_map.get(book_name)
+        if bn is None:
+            return
+        db = self.bible_dbs[primary]
+        chapters = db.get_chapters(bn)
+        self.chapter_combo['values'] = [str(c) for c in chapters]
+        current_chap = self.chapter_var.get()
+        if current_chap and current_chap in self.chapter_combo['values']:
+            self._load_chapter()
+        elif chapters:
+            self.chapter_var.set(str(chapters[0]))
+            self._load_chapter()
+
+    def _on_chapter_changed(self, event):
+        self._load_chapter()
+
+    def _load_chapter(self, highlight_verses=None):
+        primary = self._get_primary_version()
+        book_name = self.book_var.get()
+        self.viewer_text.configure(state=tk.NORMAL)
+        self.viewer_text.delete('1.0', tk.END)
+        self._current_verse_nums = []
+
+        if not primary or not book_name or primary not in self.bible_dbs:
+            self.viewer_text.configure(state=tk.DISABLED)
+            return
+        bn = self._book_number_map.get(book_name)
+        chapter_str = self.chapter_var.get()
+        if bn is None or not chapter_str:
+            self.viewer_text.configure(state=tk.DISABLED)
+            return
+
+        chapter = int(chapter_str)
+        checked = self._checked_in_order()
+
+        # Gather per-version verse maps; union all verse numbers across versions.
+        version_verses = {}
+        all_verse_nums = set()
+        for name in checked:
+            db = self.bible_dbs[name]
+            if bn not in db.books:
+                continue
+            vd = dict(db.get_verses(bn, chapter))
+            version_verses[name] = vd
+            all_verse_nums.update(vd.keys())
+
+        first_hl = None
+        sorted_verses = sorted(all_verse_nums)
+        self._current_verse_nums = sorted_verses
+        for idx, verse_num in enumerate(sorted_verses):
+            is_hl = highlight_verses and verse_num in highlight_verses
+            mark = f'verse_{verse_num}'
+            self.viewer_text.mark_set(mark, tk.INSERT)
+            self.viewer_text.mark_gravity(mark, tk.LEFT)
+            block_tag = f'vb_{verse_num}'
+
+            for name in checked:
+                vd = version_verses.get(name)
+                if not vd or verse_num not in vd:
+                    continue
+                text = vd[verse_num]
+                if is_hl:
+                    self.viewer_text.insert(tk.END, f" [{name}] {verse_num} ",
+                                            ('highlight_num', 'highlight', block_tag))
+                    self.viewer_text.insert(tk.END, f"{text}\n",
+                                            ('highlight', block_tag))
+                    if first_hl is None:
+                        first_hl = mark
+                else:
+                    self.viewer_text.insert(tk.END, f" [{name}] {verse_num} ",
+                                            ('verse_num', block_tag))
+                    self.viewer_text.insert(tk.END, f"{text}\n", (block_tag,))
+
+            if idx < len(sorted_verses) - 1:
+                self.viewer_text.insert(tk.END, "\n")
+
+        self.viewer_text.configure(state=tk.DISABLED)
+
+        if first_hl:
+            self.root.after(50, lambda: self.viewer_text.see(first_hl))
+
+    def _on_verse_jump(self, event):
+        v = self.verse_jump_var.get().strip()
+        if v.isdigit():
+            try:
+                self.viewer_text.see(f'verse_{v}')
+            except Exception:
+                pass
+
+    # ---- Font size ----
+
+    def _apply_viewer_font(self):
+        size = int(self.settings.get('viewer_font_size', 11))
+        num_size = max(8, size - 2)
+        self.viewer_text.configure(font=('Malgun Gothic', size))
+        self.viewer_text.tag_configure('verse_num', font=('Malgun Gothic', num_size, 'bold'))
+        self.viewer_text.tag_configure('highlight', font=('Malgun Gothic', size, 'bold'))
+        self.viewer_text.tag_configure('highlight_num', font=('Malgun Gothic', num_size, 'bold'))
+
+    def _change_font_size(self, delta):
+        cur = int(self.settings.get('viewer_font_size', 11))
+        new_size = max(8, min(30, cur + delta))
+        if new_size == cur:
+            return
+        self.settings['viewer_font_size'] = new_size
+        self._apply_viewer_font()
+        self._save_settings()
+
+    def _on_ctrl_wheel(self, event):
+        self._change_font_size(1 if event.delta > 0 else -1)
+        return 'break'
+
+    # ---- Verse click/drag → copy formatted ----
+
+    def _on_viewer_text_release(self, event):
+        # Determine target verses: drag selection or single click.
+        try:
+            sel_start = self.viewer_text.index('sel.first')
+            sel_end = self.viewer_text.index('sel.last')
+            verses = self._verses_in_range(sel_start, sel_end)
+        except tk.TclError:
+            idx = self.viewer_text.index(f"@{event.x},{event.y}")
+            v = self._verse_at_index(idx)
+            verses = [v] if v is not None else []
+        if verses:
+            self._copy_verses_formatted(verses)
+
+    def _verse_at_index(self, idx):
+        for t in self.viewer_text.tag_names(idx):
+            if t.startswith('vb_'):
+                try:
+                    return int(t[3:])
+                except ValueError:
+                    pass
+        return None
+
+    def _verses_in_range(self, start, end):
+        verses = []
+        text = self.viewer_text
+        for v in getattr(self, '_current_verse_nums', []):
+            ranges = text.tag_ranges(f'vb_{v}')
+            for i in range(0, len(ranges), 2):
+                r_start, r_end = ranges[i], ranges[i + 1]
+                if text.compare(r_start, '<', end) and text.compare(r_end, '>', start):
+                    verses.append(v)
+                    break
+        return verses
+
+    def _copy_verses_formatted(self, verse_nums):
+        if not verse_nums:
+            return
+        book_name = self.book_var.get()
+        bn = self._book_number_map.get(book_name) if book_name else None
+        chapter_str = self.chapter_var.get()
+        if bn is None or not chapter_str:
+            return
+        chapter = int(chapter_str)
+
+        # Use viewer's checked versions in viewer order; fall back to output_order.
+        order = self._checked_in_order() or list(self.settings.get('output_order', []))
+        if not order:
+            return
+
+        fmt = Formatter(self.settings, self.bible_dbs)
+        parts = []
+        for ver in order:
+            if ver not in self.bible_dbs:
+                continue
+            db = self.bible_dbs[ver]
+            if bn not in db.books:
+                continue
+            verse_data = [(v, db.get_verse_text(bn, chapter, v)) for v in verse_nums]
+            verse_data = [(v, t) for v, t in verse_data if t]
+            if not verse_data:
+                continue
+            actual = [v for v, _ in verse_data]
+            text = fmt.format_version_output(db, bn, chapter, actual, verse_data)
+            if text:
+                parts.append(text)
+        if not parts:
+            return
+        result = '\n\n'.join(parts)
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(result)
+            self.last_clipboard = result
+        except Exception:
+            return
+        verse_str = Formatter._format_verse_list(verse_nums, self.settings.get('range_symbol', '-'))
+        self._append_log(f"[복사] {chapter}:{verse_str} → {len(parts)}개 버전\n")
+
+    def _prev_chapter(self):
+        chapters = list(self.chapter_combo['values'])
+        if not chapters:
+            return
+        cur = self.chapter_var.get()
+        idx = chapters.index(cur) if cur in chapters else 0
+        if idx > 0:
+            self.chapter_var.set(chapters[idx - 1])
+            self._load_chapter()
+
+    def _next_chapter(self):
+        chapters = list(self.chapter_combo['values'])
+        if not chapters:
+            return
+        cur = self.chapter_var.get()
+        idx = chapters.index(cur) if cur in chapters else 0
+        if idx < len(chapters) - 1:
+            self.chapter_var.set(chapters[idx + 1])
+            self._load_chapter()
+
+    # ---- Monitoring ----
+
+    def _toggle_monitoring(self):
+        if self.monitoring:
+            self.monitoring = False
+            self.monitor_btn.configure(text="  모니터링 시작  ")
+            self._update_status("대기 중", False)
+        else:
+            self.monitoring = True
+            self.monitor_btn.configure(text="  모니터링 중지  ")
+            self._update_status("모니터링 중", True)
+            try:
+                self.last_clipboard = self.root.clipboard_get()
+            except Exception:
+                self.last_clipboard = ''
+            self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
+            self.monitor_thread.start()
+
+    def _monitor_loop(self):
+        while self.monitoring:
+            try:
+                current = self.root.clipboard_get()
+                if current != self.last_clipboard and current.strip():
+                    self.last_clipboard = current
+                    self._process_clipboard(current.strip())
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+    def _process_clipboard(self, text):
+        refs = Engine.parse_reference(text)
+        if not refs:
+            return
+        book_num, short_name, long_name, chapter, verses = refs[0]
+        order = self.settings['output_order']
+        if not order:
+            return
+
+        fmt = Formatter(self.settings, self.bible_dbs)
+        parts = []
+        for ver_name in order:
+            if ver_name not in self.bible_dbs:
+                continue
+            db = self.bible_dbs[ver_name]
+            if book_num not in db.books:
+                continue
+            if verses:
+                verse_data = [(v, db.get_verse_text(book_num, chapter, v)) for v in verses]
+            else:
+                verse_data = db.get_verses(book_num, chapter)
+            verse_data = [(v, t) for v, t in verse_data if t]
+            if not verse_data:
+                continue
+            actual_verses = [v for v, _ in verse_data]
+            result = fmt.format_version_output(db, book_num, chapter, actual_verses, verse_data)
+            if result:
+                parts.append(result)
+
+        if parts:
+            result = '\n\n'.join(parts)
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(result)
+                self.last_clipboard = result
+            except Exception:
+                pass
+
+            self.root.after(0, lambda: self._update_viewer_from_ref(book_num, chapter, verses))
+
+            verse_str = Formatter._format_verse_list(verses) if verses else "전체"
+            log_entry = f"[{short_name} {chapter}:{verse_str}] -> {len(parts)}개 버전\n"
+            self.root.after(0, lambda e=log_entry: self._append_log(e))
+
+    def _update_viewer_from_ref(self, book_num, chapter, verses):
+        primary = self._get_primary_version()
+        # Fall back to any DB containing this book if primary doesn't have it.
+        db = None
+        if primary and primary in self.bible_dbs and book_num in self.bible_dbs[primary].books:
+            db = self.bible_dbs[primary]
+        else:
+            for name in self._checked_in_order():
+                if book_num in self.bible_dbs[name].books:
+                    db = self.bible_dbs[name]
+                    break
+        if db is None:
+            return
+        short, long_ = db.books[book_num]
+        target = f"{long_} ({short})"
+        if target in (self.book_combo['values'] or []):
+            self.book_var.set(target)
+            chapters = db.get_chapters(book_num)
+            self.chapter_combo['values'] = [str(c) for c in chapters]
+            self.chapter_var.set(str(chapter))
+            self._load_chapter(highlight_verses=verses if verses else None)
+            self.notebook.select(self.tab_viewer)
+
+    def _append_log(self, text):
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.insert(tk.END, text)
+        self.log_text.see(tk.END)
+        self.log_text.configure(state=tk.DISABLED)
+
+    def _update_status(self, text, active):
+        t = self.theme
+        self.status_label.configure(text=f" {text} ")
+        if active:
+            self.status_label.configure(bg=t['status_bg'], fg=t['status_fg'])
+        else:
+            self.status_label.configure(bg=t['status_off_bg'], fg=t['status_off_fg'])
+
+    # ---- Theme ----
+
+    def _toggle_dark_mode(self):
+        self.settings['dark_mode'] = not self.settings['dark_mode']
+        self.theme = DARK_THEME if self.settings['dark_mode'] else LIGHT_THEME
+        self.dark_btn.configure(
+            text="  라이트 모드  " if self.settings['dark_mode'] else "  다크 모드  ")
+        self._apply_theme()
+        self._save_settings()
+
+    def _apply_theme(self):
+        t = self.theme
+        dark = self.settings['dark_mode']
+
+        # ttk Style
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TNotebook', background=t['bg'], borderwidth=0)
+        style.configure('TNotebook.Tab', background=t['button_bg'], foreground=t['fg'],
+                        padding=[12, 4], font=('Segoe UI', 9))
+        style.map('TNotebook.Tab',
+                  background=[('selected', t['accent']), ('!selected', t['button_bg'])],
+                  foreground=[('selected', '#FFFFFF'), ('!selected', t['fg'])])
+        style.configure('TCombobox', fieldbackground=t['entry_bg'],
+                        background=t['button_bg'], foreground=t['entry_fg'],
+                        selectbackground=t['accent'], selectforeground='#FFFFFF',
+                        arrowcolor=t['fg'])
+        style.map('TCombobox',
+                  fieldbackground=[('readonly', t['entry_bg'])],
+                  foreground=[('readonly', t['entry_fg'])])
+
+        # Root
+        self.root.configure(bg=t['bg'])
+        self.main_frame.configure(bg=t['bg'])
+
+        # Top bar
+        self.top_bar.configure(bg=t['bg'])
+        self.title_label.configure(bg=t['bg'], fg=t['accent'])
+        self._style_button(self.monitor_btn)
+        self._style_button(self.dark_btn)
+        self._update_status("모니터링 중" if self.monitoring else "대기 중", self.monitoring)
+
+        # Tabs
+        self.tab_viewer.configure(bg=t['bg'])
+        self.tab_settings.configure(bg=t['bg'])
+
+        # --- Viewer tab ---
+        self.viewer_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
+        self.log_frame.configure(bg=t['frame_bg'])
+        self._log_label.configure(bg=t['frame_bg'], fg=t['fg'])
+        # Log inner frame
+        for w in self.log_frame.winfo_children():
+            if isinstance(w, tk.Frame):
+                w.configure(bg=t['frame_bg'])
+        self.log_text.configure(bg=t['entry_bg'], fg=t['entry_fg'],
+                                insertbackground=t['fg'])
+        self.log_scroll.configure(bg=t['frame_bg'], troughcolor=t['entry_bg'])
+
+        self.viewer_outer.configure(bg=t['bg'])
+        self.version_bar.configure(bg=t['bg'])
+        self.chip_frame.configure(bg=t['bg'])
+        for w in self.version_bar.winfo_children():
+            if isinstance(w, tk.Label):
+                w.configure(bg=t['bg'], fg=t['fg'])
+            elif isinstance(w, tk.Frame):
+                w.configure(bg=t['bg'])
+        self._apply_viewer_chip_theme()
+        self.nav_frame.configure(bg=t['bg'])
+        for w in self.nav_frame.winfo_children():
+            if isinstance(w, tk.Label):
+                w.configure(bg=t['bg'], fg=t['fg'])
+        self._style_button(self.prev_btn)
+        self._style_button(self.next_btn)
+        self._style_button(self.jump_btn)
+        self._style_button(self.font_plus_btn)
+        self._style_button(self.font_minus_btn)
+        self.verse_jump_entry.configure(bg=t['entry_bg'], fg=t['entry_fg'],
+                                          insertbackground=t['fg'],
+                                          highlightthickness=1, highlightcolor=t['accent'],
+                                          highlightbackground=t['border'])
+        self.viewer_text_frame.configure(bg=t['bg'])
+        self.viewer_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
+                                     insertbackground=t['fg'],
+                                     selectbackground=t['accent'], selectforeground='#FFFFFF')
+        self.viewer_text.tag_configure('verse_num', foreground=t['verse_num'])
+        self.viewer_text.tag_configure('highlight', background=t['highlight_bg'],
+                                         foreground=t['highlight_fg'])
+        self.viewer_text.tag_configure('highlight_num', foreground=t['highlight_fg'],
+                                         background=t['highlight_bg'])
+        self.viewer_scroll.configure(bg=t['frame_bg'], troughcolor=t['viewer_bg'])
+
+        # --- Settings tab ---
+        self.settings_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
+        self.settings_left.configure(bg=t['frame_bg'])
+        self.settings_right.configure(bg=t['bg'])
+        self.settings_canvas.configure(bg=t['bg'])
+        self.settings_scrollbar.configure(bg=t['frame_bg'], troughcolor=t['bg'])
+        self.settings_scroll_frame.configure(bg=t['bg'])
+
+        # Left panel labels
+        for w in self.settings_left.winfo_children():
+            if isinstance(w, tk.Label):
+                w.configure(bg=t['frame_bg'], fg=t['fg'])
+            elif isinstance(w, tk.Frame):
+                w.configure(bg=t['frame_bg'])
+                for c in w.winfo_children():
+                    if isinstance(c, tk.Label):
+                        c.configure(bg=t['frame_bg'], fg=t['fg'])
+
+        # Dual listbox area
+        for w in self.settings_left.winfo_children():
+            if isinstance(w, tk.Frame):
+                w.configure(bg=t['frame_bg'])
+                for c in w.winfo_children():
+                    if isinstance(c, tk.Frame):
+                        c.configure(bg=t['frame_bg'])
+                        for gc in c.winfo_children():
+                            if isinstance(gc, tk.Label):
+                                gc.configure(bg=t['frame_bg'], fg=t['fg'])
+
+        self._apply_listbox_theme()
+
+        # Buttons in settings
+        for btn in [self.add_btn, self.remove_btn, self.refresh_btn,
+                    self.up_btn, self.down_btn, self.clear_btn, self.preview_refresh_btn]:
+            self._style_button(btn)
+
+        # LabelFrames and their radio/check buttons
+        for lf in self._settings_labelframes:
+            lf.configure(bg=t['bg'], fg=t['fg'])
+            for child in lf.winfo_children():
+                if isinstance(child, (tk.Radiobutton, tk.Checkbutton)):
+                    child.configure(bg=t['bg'], fg=t['fg'],
+                                    selectcolor=t['radio_sel'],
+                                    activebackground=t['bg'],
+                                    activeforeground=t['fg'],
+                                    highlightthickness=0)
+
+        # Header labels in scroll frame
+        for lbl in self._settings_header_labels:
+            lbl.configure(bg=t['bg'], fg=t['fg'])
+
+        # Separator in scroll frame
+        for w in self.settings_scroll_frame.winfo_children():
+            if isinstance(w, tk.Frame) and w not in self._settings_labelframes:
+                # Could be separator or preview header
+                w.configure(bg=t['bg'])
+                for c in w.winfo_children():
+                    if isinstance(c, tk.Label):
+                        c.configure(bg=t['bg'], fg=t['fg'])
+
+        # Preview
+        self.preview_text.configure(bg=t['preview_bg'], fg=t['preview_fg'],
+                                      insertbackground=t['fg'])
+
+    def _apply_viewer_chip_theme(self):
+        t = getattr(self, 'theme', None)
+        if not t:
+            return
+        for n, frame in self.viewer_chip_widgets.items():
+            frame.configure(bg=t['button_bg'], highlightbackground=t['border'])
+        for n, lbl in self.viewer_chip_labels.items():
+            lbl.configure(bg=t['button_bg'], fg=t['button_fg'])
+        self._highlight_focused_chip()
+
+    def _apply_listbox_theme(self):
+        t = self.theme
+        for lb in [self.avail_listbox, self.order_listbox]:
+            lb.configure(bg=t['listbox_bg'], fg=t['listbox_fg'],
+                        selectbackground=t['listbox_sel_bg'],
+                        selectforeground=t['listbox_sel_fg'],
+                        highlightthickness=1, highlightcolor=t['accent'],
+                        highlightbackground=t['border'])
+
+    def _style_button(self, btn):
+        t = self.theme
+        btn.configure(bg=t['button_bg'], fg=t['button_fg'],
+                     activebackground=t['button_active'], activeforeground=t['button_fg'],
+                     highlightthickness=0, bd=0)
+
+    # ---- Close ----
+
+    def _on_close(self):
+        self.monitoring = False
+        self._save_settings()
+        for db in self.bible_dbs.values():
+            try:
+                db.close()
+            except Exception:
+                pass
+        self.root.destroy()
+
+
+# ---------------------------------------------------------------------------
+# Entry
+# ---------------------------------------------------------------------------
+
+def main():
+    root = tk.Tk()
+    AutoBibleApp(root)
+    root.mainloop()
+
+
+if __name__ == '__main__':
+    main()
