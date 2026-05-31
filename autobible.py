@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -872,6 +872,29 @@ class BibleDB:
         row = cur.fetchone()
         return clean_text(row[0]) if row else ''
 
+    def search(self, keyword, limit=300):
+        """Find verses whose (cleaned) text contains keyword.
+
+        Returns a list of (book_number, chapter, verse, cleaned_text), in
+        canonical order. A raw LIKE prefilter keeps it fast; the cleaned-text
+        check drops false positives that only matched inside tags/footnotes.
+        """
+        keyword = (keyword or '').strip()
+        if not keyword:
+            return []
+        cur = self.conn.cursor()
+        cur.execute("SELECT book_number, chapter, verse, text FROM verses "
+                    "WHERE text LIKE ? ORDER BY book_number, chapter, verse",
+                    (f'%{keyword}%',))
+        out = []
+        for b, c, v, t in cur.fetchall():
+            ct = clean_text(t)
+            if keyword in ct:
+                out.append((b, c, v, ct))
+                if len(out) >= limit:
+                    break
+        return out
+
     def close(self):
         self.conn.close()
 
@@ -1130,6 +1153,7 @@ class BibleClipApp:
         self._tip_word = None          # (code, verse) under the cursor
         self._log_refs = []            # session-only clickable log references
         self._lex_popups = []          # open independent dictionary windows
+        self._search_results = []      # current search results (book, chap, verse)
 
         # Load databases
         self._load_databases()
@@ -1423,6 +1447,19 @@ class BibleClipApp:
                                     command=lambda: self._on_verse_jump(None))
         self.jump_btn.pack(side=tk.LEFT)
 
+        # Keyword search ( "#태초에" or just "태초에" )
+        self.search_label = tk.Label(nav, text="검색:", font=(UI_FONT, 9))
+        self.search_label.pack(side=tk.LEFT, padx=(14, 4))
+        self.search_var = tk.StringVar()
+        self.search_entry = tk.Entry(nav, textvariable=self.search_var,
+                                     width=12, font=(UI_FONT, 9))
+        self.search_entry.pack(side=tk.LEFT, padx=(0, 4))
+        self.search_entry.bind('<Return>', self._on_search_box)
+        self.search_btn = tk.Button(nav, text="검색", font=(UI_FONT, 9),
+                                    relief=tk.FLAT, cursor='hand2',
+                                    command=lambda: self._on_search_box(None))
+        self.search_btn.pack(side=tk.LEFT)
+
         # Font size controls (rightmost)
         self.font_plus_btn = tk.Button(nav, text=" A+ ", font=(UI_FONT, 9),
                                          relief=tk.FLAT, cursor='hand2',
@@ -1554,6 +1591,13 @@ class BibleClipApp:
                                lambda e: self.log_text.configure(cursor=''))
 
         self._apply_viewer_font()
+
+        # Search-result clickable styling
+        self.viewer_text.tag_configure('search_head', font=(UI_FONT, 10, 'bold'))
+        self.viewer_text.tag_bind('sr_click', '<Enter>',
+                                  lambda e: self.viewer_text.configure(cursor='hand2'))
+        self.viewer_text.tag_bind('sr_click', '<Leave>',
+                                  lambda e: self.viewer_text.configure(cursor=''))
 
         # Click/drag → copy formatted; Ctrl+wheel → font size (all panels)
         self.viewer_text.bind('<ButtonRelease-1>', self._on_viewer_text_release)
@@ -2757,14 +2801,97 @@ class BibleClipApp:
         if not parts:
             return
         result = '\n\n'.join(parts)
-        try:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(result)
-            self.last_clipboard = result
-        except Exception:
-            return
+        self._clipboard_write(result)
+        self.last_clipboard = result
         verse_str = Formatter._format_verse_list(verse_nums, self.settings.get('range_symbol', '-'))
         self._append_log(f"[복사] {chapter}:{verse_str} → {len(parts)}개 버전\n")
+
+    # ---- Keyword search ----
+
+    def _on_search_box(self, event):
+        self._run_search(self.search_var.get(), copy_first=False)
+
+    def _search_version(self):
+        ver = self._get_primary_version()
+        if ver and ver in self.bible_dbs:
+            return ver
+        for v in ('KRV', 'NRKV', 'KNRSV'):
+            if v in self.bible_dbs:
+                return v
+        return next(iter(self.bible_dbs), None)
+
+    def _run_search(self, raw, copy_first=False):
+        keyword = (raw or '').strip().lstrip('#').strip()
+        if not keyword:
+            return
+        ver = self._search_version()
+        if not ver:
+            return
+        results = self.bible_dbs[ver].search(keyword, limit=300)
+        self._render_search_results(keyword, ver, results)
+        self.notebook.select(self.tab_viewer)
+        if copy_first and results:
+            b, c, v, _ = results[0]
+            self._copy_single_ref(b, c, v)
+            self._append_log(f'[검색 복사] {keyword} → 첫 구절\n')
+
+    def _render_search_results(self, keyword, ver, results):
+        self._search_results = [(b, c, v) for b, c, v, _ in results]
+        text = self.viewer_text
+        text.configure(state=tk.NORMAL)
+        text.delete('1.0', tk.END)
+        self._current_verse_nums = []
+        db = self.bible_dbs.get(ver)
+        if not results:
+            text.insert(tk.END, f'"{keyword}" 검색 결과 없음  ({ver})')
+            text.configure(state=tk.DISABLED)
+            return
+        text.insert(tk.END,
+                    f'"{keyword}" 검색 결과 {len(results)}건  ({ver}) — 구절 클릭 시 복사\n\n',
+                    ('search_head',))
+        for idx, (b, c, v, t) in enumerate(results):
+            short = db.books.get(b, ('?', '?'))[0] if db else '?'
+            tag = f'sr_{idx}'
+            text.tag_configure(tag)
+            text.insert(tk.END, f'({short} {c}:{v}) ', ('search_ref', 'sr_click', tag))
+            text.insert(tk.END, f'{t}\n\n', ('sr_click', tag))
+            text.tag_bind(tag, '<Button-1>', lambda e, i=idx: self._on_search_result_click(i))
+        text.configure(state=tk.DISABLED)
+        text.yview_moveto(0)
+
+    def _on_search_result_click(self, idx):
+        if 0 <= idx < len(self._search_results):
+            b, c, v = self._search_results[idx]
+            self._copy_single_ref(b, c, v)
+
+    def _format_single_ref(self, book_num, chapter, verse):
+        order = self._checked_in_order() or list(self.settings.get('output_order', []))
+        fmt = Formatter(self.settings, self.bible_dbs)
+        parts = []
+        for ver in order:
+            db = self.bible_dbs.get(ver)
+            if not db or book_num not in db.books:
+                continue
+            t = db.get_verse_text(book_num, chapter, verse)
+            if not t:
+                continue
+            txt = fmt.format_version_output(db, book_num, chapter, [verse], [(verse, t)])
+            if txt:
+                parts.append(txt)
+        return '\n\n'.join(parts)
+
+    def _copy_single_ref(self, book_num, chapter, verse):
+        result = self._format_single_ref(book_num, chapter, verse)
+        if not result:
+            return
+        self._clipboard_write(result)
+        self.last_clipboard = result
+        short = '?'
+        for db in self.bible_dbs.values():
+            if book_num in db.books:
+                short = db.books[book_num][0]
+                break
+        self._append_log(f'[복사] {short} {chapter}:{verse}\n')
 
     def _nav_keys_allowed(self):
         """Arrow-key chapter nav only on the viewer tab and not while a field
@@ -2864,6 +2991,13 @@ class BibleClipApp:
             time.sleep(0.5)
 
     def _process_clipboard(self, text):
+        # "#키워드" → keyword search (show results, copy the first verse)
+        if text.startswith('#'):
+            keyword = text[1:].strip()
+            if keyword:
+                self.last_clipboard = text
+                self.root.after(0, lambda kw=keyword: self._run_search(kw, copy_first=True))
+            return
         refs = Engine.parse_reference(text)
         if not refs:
             return
@@ -3041,12 +3175,15 @@ class BibleClipApp:
         self._style_button(self.prev_btn)
         self._style_button(self.next_btn)
         self._style_button(self.jump_btn)
+        self._style_button(self.search_btn)
         self._style_button(self.font_plus_btn)
         self._style_button(self.font_minus_btn)
-        self.verse_jump_entry.configure(bg=t['entry_bg'], fg=t['entry_fg'],
-                                          insertbackground=t['fg'],
-                                          highlightthickness=1, highlightcolor=t['accent'],
-                                          highlightbackground=t['border'])
+        self.search_label.configure(bg=t['bg'], fg=t['fg'])
+        for ent in (self.verse_jump_entry, self.search_entry):
+            ent.configure(bg=t['entry_bg'], fg=t['entry_fg'],
+                          insertbackground=t['fg'],
+                          highlightthickness=1, highlightcolor=t['accent'],
+                          highlightbackground=t['border'])
         self.viewer_text_frame.configure(bg=t['bg'])
         sel_bg, sel_fg = t['select_bg'], t['select_fg']
         self.viewer_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
@@ -3060,6 +3197,8 @@ class BibleClipApp:
         self.viewer_text.tag_configure('highlight_num', foreground=t['highlight_fg'],
                                          background=t['highlight_bg'],
                                          selectbackground=sel_bg, selectforeground=sel_fg)
+        self.viewer_text.tag_configure('search_head', foreground=t['fg'])
+        self.viewer_text.tag_configure('search_ref', foreground=t['accent'])
         self._style_scrollbar(self.viewer_scroll)
 
         # --- Settings tab ---
