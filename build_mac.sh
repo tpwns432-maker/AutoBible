@@ -65,6 +65,11 @@ if [ -d "original_lang" ]; then
   cp original_lang/* "$MACOS/original_lang/" 2>/dev/null || true
 fi
 
+# Copying into the bundle invalidated the signature; re-sign ad-hoc so macOS
+# doesn't report the app as "damaged".
+echo "==> Re-signing (ad-hoc) AutoBible.app"
+codesign --force --deep --sign - "$APP" || echo "  (codesign failed; continuing)"
+
 echo "==> Assembling distribution folder dist/AutoBible-mac/"
 OUT="dist/AutoBible-mac"
 rm -rf "$OUT"

@@ -58,8 +58,9 @@ dist/AutoBible-mac/AutoBible.app   ← 더블클릭
 - `AutoBible.app` 우클릭 → **열기** → **열기**, 또는
 - 터미널에서:
   ```bash
-  xattr -dr com.apple.quarantine dist/AutoBible-mac/AutoBible.app
+  xattr -cr /Applications/AutoBible.app    # 경로는 실제 위치에 맞게
   ```
+  ("손상되어 열 수 없음(damaged)" 경고가 나올 때도 위 명령으로 해결됩니다.)
 
 ## 참고 / 동작 차이
 

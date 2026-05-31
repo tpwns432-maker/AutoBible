@@ -21,7 +21,7 @@ import datetime
 import webbrowser
 import shlex
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -826,6 +826,7 @@ LIGHT_THEME = {
     'viewer_bg': '#FAFAFA', 'viewer_fg': '#1A1A2E',
     'highlight_bg': '#FFE082', 'highlight_fg': '#1A1A2E',
     'select_bg': '#0D47A1', 'select_fg': '#FFFFFF',
+    'scroll_thumb': '#B0B4BC', 'scroll_trough': '#ECECEC', 'scroll_active': '#8A9099',
     'accent': '#1565C0', 'accent_hover': '#0D47A1',
     'button_bg': '#E3F2FD', 'button_fg': '#1565C0', 'button_active': '#BBDEFB',
     'frame_bg': '#F5F5F5',
@@ -845,6 +846,7 @@ DARK_THEME = {
     'viewer_bg': '#181825', 'viewer_fg': '#CDD6F4',
     'highlight_bg': '#F9E2AF', 'highlight_fg': '#1E1E2E',
     'select_bg': '#1E40AF', 'select_fg': '#FFFFFF',
+    'scroll_thumb': '#6C7086', 'scroll_trough': '#11111B', 'scroll_active': '#9399B2',
     'accent': '#89B4FA', 'accent_hover': '#74C7EC',
     'button_bg': '#313244', 'button_fg': '#89B4FA', 'button_active': '#45475A',
     'frame_bg': '#1E1E2E',
@@ -1934,6 +1936,7 @@ class AutoBibleApp:
         txt.configure(yscrollcommand=sb.set)
         txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._style_scrollbar(sb)
 
         lang = self.lex_lang_var.get()
         lex = self.lexicon_ko if lang == 'ko' else self.lexicon_en
@@ -2873,7 +2876,7 @@ class AutoBibleApp:
         self.log_text.configure(bg=t['entry_bg'], fg=t['entry_fg'],
                                 insertbackground=t['fg'])
         self.log_text.tag_configure('logref', foreground=t['accent'])
-        self.log_scroll.configure(bg=t['frame_bg'], troughcolor=t['entry_bg'])
+        self._style_scrollbar(self.log_scroll)
 
         self.viewer_outer.configure(bg=t['bg'])
         self.version_bar.configure(bg=t['bg'])
@@ -2910,14 +2913,14 @@ class AutoBibleApp:
         self.viewer_text.tag_configure('highlight_num', foreground=t['highlight_fg'],
                                          background=t['highlight_bg'],
                                          selectbackground=sel_bg, selectforeground=sel_fg)
-        self.viewer_scroll.configure(bg=t['frame_bg'], troughcolor=t['viewer_bg'])
+        self._style_scrollbar(self.viewer_scroll)
 
         # --- Settings tab ---
         self.settings_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
         self.settings_left.configure(bg=t['frame_bg'])
         self.settings_right.configure(bg=t['bg'])
         self.settings_canvas.configure(bg=t['bg'])
-        self.settings_scrollbar.configure(bg=t['frame_bg'], troughcolor=t['bg'])
+        self._style_scrollbar(self.settings_scrollbar)
         self.settings_scroll_frame.configure(bg=t['bg'])
 
         # Left panel labels
@@ -3000,7 +3003,7 @@ class AutoBibleApp:
                 txt.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
                               insertbackground=t['fg'],
                               selectbackground=sel_bg, selectforeground=sel_fg)
-                scr.configure(bg=t['frame_bg'], troughcolor=t['viewer_bg'])
+                self._style_scrollbar(scr)
             self.lex_mid_text.tag_configure('lex_vnum', foreground=t['verse_num'])
             self.lex_mid_text.tag_configure('lex_word', foreground=t['accent'])
 
@@ -3028,6 +3031,13 @@ class AutoBibleApp:
         btn.configure(bg=t['button_bg'], fg=t['button_fg'],
                      activebackground=t['button_active'], activeforeground=t['button_fg'],
                      highlightthickness=0, bd=0)
+
+    def _style_scrollbar(self, sb):
+        """Visible scrollbar: a contrasting thumb so position is obvious."""
+        t = self.theme
+        sb.configure(bg=t['scroll_thumb'], troughcolor=t['scroll_trough'],
+                     activebackground=t['scroll_active'], width=14,
+                     bd=0, relief=tk.FLAT, highlightthickness=0, elementborderwidth=0)
 
     # ---- Auto-update ----
 
