@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.4.0"
+__version__ = "1.4.1"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -356,6 +356,20 @@ def clean_text(text):
     text = re.sub(r'\[[가-힣a-zA-Z0-9\s,.:]+\]\s*', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
+
+
+def despace(s):
+    """Strip ALL whitespace so search ignores spacing differences."""
+    return re.sub(r'\s+', '', s or '')
+
+
+def trigrams(s):
+    """Set of 3-character shingles of s (used for fuzzy-match scoring)."""
+    if not s:
+        return set()
+    if len(s) < 3:
+        return {s}
+    return {s[i:i + 3] for i in range(len(s) - 2)}
 
 
 # ---------------------------------------------------------------------------
@@ -832,6 +846,7 @@ class BibleDB:
         self.name = os.path.splitext(os.path.basename(db_path))[0]
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.is_english = self.name.upper() in ENGLISH_VERSIONS
+        self._search_index = None   # built lazily on first search
         self._load_info()
         self._load_books()
 
@@ -872,28 +887,54 @@ class BibleDB:
         row = cur.fetchone()
         return clean_text(row[0]) if row else ''
 
-    def search(self, keyword, limit=300):
-        """Find verses whose (cleaned) text contains keyword.
+    def _build_search_index(self):
+        """Cache (book, chap, verse, cleaned, despaced, trigrams) once."""
+        if self._search_index is not None:
+            return
+        cur = self.conn.cursor()
+        cur.execute("SELECT book_number, chapter, verse, text FROM verses "
+                    "ORDER BY book_number, chapter, verse")
+        idx = []
+        for b, c, v, t in cur.fetchall():
+            ct = clean_text(t)
+            dt = despace(ct)
+            idx.append((b, c, v, ct, dt, trigrams(dt)))
+        self._search_index = idx
 
-        Returns a list of (book_number, chapter, verse, cleaned_text), in
-        canonical order. A raw LIKE prefilter keeps it fast; the cleaned-text
-        check drops false positives that only matched inside tags/footnotes.
+    def search(self, keyword, limit=300, fuzzy_threshold=0.7):
+        """Whitespace-insensitive verse search with a fuzzy fallback.
+
+        1) Exact (spacing-ignored) substring matches, in canonical order.
+        2) If none, rank verses by trigram overlap with the query (handles
+           particle changes / minor typos) and return those above a threshold.
+        Returns a list of (book_number, chapter, verse, cleaned_text).
         """
         keyword = (keyword or '').strip()
         if not keyword:
             return []
-        cur = self.conn.cursor()
-        cur.execute("SELECT book_number, chapter, verse, text FROM verses "
-                    "WHERE text LIKE ? ORDER BY book_number, chapter, verse",
-                    (f'%{keyword}%',))
-        out = []
-        for b, c, v, t in cur.fetchall():
-            ct = clean_text(t)
-            if keyword in ct:
-                out.append((b, c, v, ct))
-                if len(out) >= limit:
-                    break
-        return out
+        self._build_search_index()
+        qd = despace(keyword)
+        if not qd:
+            return []
+        exact = [(b, c, v, ct) for (b, c, v, ct, dt, tri) in self._search_index
+                 if qd in dt]
+        if exact:
+            return exact[:limit]
+        qtri = trigrams(qd)
+        if not qtri:
+            return []
+        scored = []
+        for (b, c, v, ct, dt, tri) in self._search_index:
+            if not tri:
+                continue
+            inter = len(qtri & tri)
+            if not inter:
+                continue
+            score = inter / len(qtri)
+            if score >= fuzzy_threshold:
+                scored.append((score, b, c, v, ct))
+        scored.sort(key=lambda r: (-r[0], r[1], r[2], r[3]))
+        return [(b, c, v, ct) for _, b, c, v, ct in scored[:limit]]
 
     def close(self):
         self.conn.close()
