@@ -21,24 +21,19 @@ import datetime
 import webbrowser
 import shlex
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
-# Platform-aware font families. Windows keeps its original fonts exactly;
-# macOS/Linux get native equivalents so Korean + UI text render cleanly.
+# Single app-wide font: each OS's default Korean Gothic (always pre-installed),
+# used uniformly for UI, scripture body, and the log.
 if sys.platform == 'darwin':
-    UI_FONT = 'Apple SD Gothic Neo'    # Korean + Latin UI
-    BODY_FONT = 'Apple SD Gothic Neo'  # Korean scripture body
-    MONO_FONT = 'Menlo'                # monospace log
+    APP_FONT = 'Apple SD Gothic Neo'
 elif IS_WINDOWS:
-    UI_FONT = 'Segoe UI'
-    BODY_FONT = 'Malgun Gothic'
-    MONO_FONT = 'Consolas'
+    APP_FONT = 'Malgun Gothic'
 else:  # Linux / other
-    UI_FONT = 'Noto Sans CJK KR'
-    BODY_FONT = 'Noto Sans CJK KR'
-    MONO_FONT = 'DejaVu Sans Mono'
+    APP_FONT = 'Noto Sans CJK KR'
+UI_FONT = BODY_FONT = MONO_FONT = APP_FONT
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
@@ -1007,7 +1002,7 @@ class AutoBibleApp:
         'last_chapter': None,
         'viewer_hsash': [],              # horizontal 3-panel sash x positions
         'viewer_vsash': None,            # vertical (panels/log) sash y position
-        'recent_refs': [],               # recent caught references (most-recent first)
+        'lex_popup_size': '440x480',     # size for new independent dict windows
     }
 
     def __init__(self, root):
@@ -1033,6 +1028,8 @@ class AutoBibleApp:
         self._tip = None               # hover tooltip window
         self._tip_after = None         # scheduled tooltip callback id
         self._tip_word = None          # (code, verse) under the cursor
+        self._log_refs = []            # session-only clickable log references
+        self._lex_popups = []          # open independent dictionary windows
 
         # Load databases
         self._load_databases()
@@ -1426,17 +1423,10 @@ class AutoBibleApp:
         log_header = tk.Frame(log_frame)
         log_header.pack(fill=tk.X, padx=8, pady=(4, 2))
         self.log_header = log_header
-        log_lbl = tk.Label(log_header, text="활동 로그", font=(UI_FONT, 9, 'bold'))
+        log_lbl = tk.Label(log_header, text="활동 로그  (구절 클릭 → 이동)",
+                           font=(UI_FONT, 9, 'bold'))
         log_lbl.pack(side=tk.LEFT)
         self._log_label = log_lbl
-        self.recent_label = tk.Label(log_header, text="최근 조회:", font=(UI_FONT, 9))
-        self.recent_label.pack(side=tk.LEFT, padx=(16, 4))
-        self.recent_var = tk.StringVar()
-        self.recent_combo = ttk.Combobox(log_header, textvariable=self.recent_var,
-                                          state='readonly', width=18)
-        self.recent_combo.pack(side=tk.LEFT)
-        self.recent_combo.bind('<<ComboboxSelected>>', self._on_recent_selected)
-        self._refresh_recent_combo()
 
         log_inner = tk.Frame(log_frame)
         log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
@@ -1446,6 +1436,11 @@ class AutoBibleApp:
         self.log_text.configure(yscrollcommand=self.log_scroll.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.tag_configure('logref', underline=True)
+        self.log_text.tag_bind('logref', '<Enter>',
+                               lambda e: self.log_text.configure(cursor='hand2'))
+        self.log_text.tag_bind('logref', '<Leave>',
+                               lambda e: self.log_text.configure(cursor=''))
 
         self._apply_viewer_font()
 
@@ -1704,8 +1699,12 @@ class AutoBibleApp:
                     verse = int(tag[3:])
                 except ValueError:
                     pass
-        if code:
-            self._hide_tip()
+        if not code:
+            return
+        self._hide_tip()
+        if event.state & 0x0004:   # Control held → open an independent window
+            self._open_lex_popup(code, verse)
+        else:
             self._show_lex_entry(code, verse)
 
     # ---- Hover preview ----
@@ -1784,11 +1783,11 @@ class AutoBibleApp:
         except Exception:
             pass
         tip.wm_geometry(f"+{x}+{y}")
-        lbl = tk.Label(tip, text=text, justify=tk.LEFT, font=(UI_FONT, 9),
+        lbl = tk.Label(tip, text=text, justify=tk.LEFT, font=(UI_FONT, 11),
                        bg=t['preview_bg'], fg=t['preview_fg'],
-                       relief=tk.SOLID, borderwidth=1, padx=8, pady=5,
-                       wraplength=320)
-        lbl.pack()
+                       relief=tk.SOLID, borderwidth=1, padx=14, pady=12,
+                       wraplength=520)
+        lbl.pack(ipadx=6, ipady=4)
         self._tip = tip
 
     def _hide_tip(self):
@@ -1852,6 +1851,63 @@ class AutoBibleApp:
         else:
             body = f"{morph}<b>[{code}]</b><br><br>{entry}"
         render_dict_html(self.lex_right_text, body, fg=fg)
+
+    # ---- Independent dictionary windows (Ctrl+click) ----
+
+    def _open_lex_popup(self, code, verse):
+        t = getattr(self, 'theme', LIGHT_THEME)
+        top = tk.Toplevel(self.root)
+        top.title(f"사전 - [{code}]")
+        size = self.settings.get('lex_popup_size', '440x480')
+        n = len(self._lex_popups)
+        off = 36 + (n % 6) * 26
+        try:
+            top.geometry(f"{size}+{self.root.winfo_rootx() + off}"
+                         f"+{self.root.winfo_rooty() + off}")
+        except Exception:
+            top.geometry(size)
+        try:
+            if IS_WINDOWS:
+                top.iconbitmap(os.path.join(BASE_DIR, 'icon.ico'))
+        except Exception:
+            pass
+        top.configure(bg=t['bg'])
+        frame = tk.Frame(top, bg=t['bg'])
+        frame.pack(fill=tk.BOTH, expand=True)
+        txt = tk.Text(frame, font=(BODY_FONT, 11), wrap=tk.WORD, state=tk.DISABLED,
+                      bg=t['viewer_bg'], fg=t['viewer_fg'], padx=10, pady=8,
+                      insertbackground=t['fg'],
+                      selectbackground=t['select_bg'], selectforeground=t['select_fg'])
+        sb = tk.Scrollbar(frame, command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+
+        lang = self.lex_lang_var.get()
+        lex = self.lexicon_ko if lang == 'ko' else self.lexicon_en
+        morph = self._morphology_html(code, verse)
+        entry = lex.lookup(code) if lex else None
+        body = (f"{morph}<b>[{code}]</b><br><br>"
+                + (entry if entry is not None else "사전 항목 없음"))
+        render_dict_html(txt, body, fg=t['viewer_fg'])
+
+        self._lex_popups.append(top)
+
+        def on_close():
+            try:
+                sz = top.geometry().split('+')[0]
+                if 'x' in sz:
+                    self.settings['lex_popup_size'] = sz
+            except Exception:
+                pass
+            try:
+                self._lex_popups.remove(top)
+            except ValueError:
+                pass
+            top.destroy()
+
+        top.protocol("WM_DELETE_WINDOW", on_close)
+        top.bind('<Escape>', lambda e: on_close())
 
     # ---- Version order management ----
 
@@ -2641,10 +2697,8 @@ class AutoBibleApp:
 
             self.root.after(0, lambda: self._update_viewer_from_ref(book_num, chapter, verses))
 
-            verse_str = Formatter._format_verse_list(verses) if verses else "전체"
-            log_entry = f"[{short_name} {chapter}:{verse_str}] -> {len(parts)}개 버전\n"
-            self.root.after(0, lambda e=log_entry: self._append_log(e))
-            self.root.after(0, lambda: self._add_recent_ref(book_num, chapter, verses, short_name))
+            self.root.after(0, lambda: self._append_log_ref(
+                book_num, chapter, verses, short_name, len(parts)))
 
     def _update_viewer_from_ref(self, book_num, chapter, verses):
         primary = self._get_primary_version()
@@ -2675,33 +2729,26 @@ class AutoBibleApp:
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
 
-    # ---- Recent references ----
+    # ---- Clickable log references (session only) ----
 
-    def _refresh_recent_combo(self):
-        if not hasattr(self, 'recent_combo'):
-            return
-        labels = [r.get('label', '') for r in self.settings.get('recent_refs', [])]
-        self.recent_combo['values'] = labels
+    def _append_log_ref(self, book_num, chapter, verses, short_name, n_versions):
+        """Append a caught reference as a clickable log line."""
+        idx = len(self._log_refs)
+        self._log_refs.append((book_num, chapter, list(verses or [])))
+        verse_str = Formatter._format_verse_list(verses) if verses else "전체"
+        label = f"[{short_name} {chapter}:{verse_str}] → {n_versions}개 버전\n"
+        tag = f"logref_{idx}"
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.insert(tk.END, label, ('logref', tag))
+        self.log_text.tag_bind(tag, '<Button-1>',
+                               lambda e, i=idx: self._on_log_ref_click(i))
+        self.log_text.see(tk.END)
+        self.log_text.configure(state=tk.DISABLED)
 
-    def _add_recent_ref(self, book_num, chapter, verses, short_name):
-        verse_str = Formatter._format_verse_list(verses) if verses else ''
-        label = (f"{short_name} {chapter}:{verse_str}" if verse_str
-                 else f"{short_name} {chapter}")
-        entry = {'book_num': book_num, 'chapter': chapter,
-                 'verses': list(verses or []), 'label': label}
-        recents = [r for r in self.settings.get('recent_refs', [])
-                   if r.get('label') != label]
-        recents.insert(0, entry)
-        self.settings['recent_refs'] = recents[:20]
-        self._refresh_recent_combo()
-
-    def _on_recent_selected(self, event):
-        label = self.recent_var.get()
-        for r in self.settings.get('recent_refs', []):
-            if r.get('label') == label:
-                self._update_viewer_from_ref(r['book_num'], r['chapter'],
-                                             r.get('verses') or [])
-                break
+    def _on_log_ref_click(self, idx):
+        if 0 <= idx < len(self._log_refs):
+            book_num, chapter, verses = self._log_refs[idx]
+            self._update_viewer_from_ref(book_num, chapter, verses)
 
     def _update_status(self, text, active):
         t = self.theme
@@ -2764,7 +2811,6 @@ class AutoBibleApp:
         self._log_label.configure(bg=t['frame_bg'], fg=t['fg'])
         if hasattr(self, 'log_header'):
             self.log_header.configure(bg=t['frame_bg'])
-            self.recent_label.configure(bg=t['frame_bg'], fg=t['fg'])
         # Log inner frame
         for w in self.log_frame.winfo_children():
             if isinstance(w, tk.Frame):
@@ -2774,6 +2820,7 @@ class AutoBibleApp:
                         c.configure(bg=t['frame_bg'], fg=t['fg'])
         self.log_text.configure(bg=t['entry_bg'], fg=t['entry_fg'],
                                 insertbackground=t['fg'])
+        self.log_text.tag_configure('logref', foreground=t['accent'])
         self.log_scroll.configure(bg=t['frame_bg'], troughcolor=t['entry_bg'])
 
         self.viewer_outer.configure(bg=t['bg'])
