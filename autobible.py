@@ -13,11 +13,13 @@ import threading
 import time
 import urllib.request
 import urllib.error
+import ssl
 import zipfile
 import tempfile
 import subprocess
+import datetime
 
-__version__ = "1.0.0"
+__version__ = "1.1.4"
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
@@ -295,17 +297,45 @@ def parse_version(s):
     return tuple(nums) if nums else (0,)
 
 
+def _fetch_release_raw(timeout=8, ssl_context=None):
+    req = urllib.request.Request(UPDATE_CHECK_URL, headers={
+        'User-Agent': f'AutoBible/{__version__}',
+        'Accept': 'application/vnd.github+json',
+    })
+    with urllib.request.urlopen(req, timeout=timeout, context=ssl_context) as resp:
+        return json.loads(resp.read().decode('utf-8'))
+
+
 def fetch_latest_release(timeout=8):
-    """Fetch latest release info from GitHub. Returns dict or None."""
+    """Fetch latest release info from GitHub.
+
+    Returns (info_dict_or_None, error_message_or_empty).
+    Tries with default SSL verification; on SSL failure, retries with an
+    unverified context (acceptable for fetching public release metadata).
+    """
+    error = ''
+    data = None
     try:
-        req = urllib.request.Request(UPDATE_CHECK_URL, headers={
-            'User-Agent': f'AutoBible/{__version__}',
-            'Accept': 'application/vnd.github+json',
-        })
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, OSError, ValueError):
-        return None
+        data = _fetch_release_raw(timeout=timeout)
+    except (ssl.SSLError, urllib.error.URLError) as e:
+        error = f"SSL/네트워크 오류: {e}"
+        # Fallback: retry without SSL verification
+        try:
+            ctx = ssl._create_unverified_context()
+            data = _fetch_release_raw(timeout=timeout, ssl_context=ctx)
+            error = ''
+        except Exception as e2:
+            error = f"폴백 실패: {e2}"
+    except (urllib.error.HTTPError) as e:
+        error = f"HTTP 오류: {e.code} {e.reason}"
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        error = f"응답 파싱 실패: {e}"
+    except Exception as e:
+        error = f"알 수 없는 오류: {type(e).__name__}: {e}"
+
+    if data is None:
+        return None, (error or "응답 없음")
+
     tag = data.get('tag_name') or ''
     body = data.get('body') or ''
     asset_url = ''
@@ -316,9 +346,201 @@ def fetch_latest_release(timeout=8):
             asset_url = asset.get('browser_download_url', '')
             asset_name = name
             break
-    if not (tag and asset_url):
-        return None
-    return {'version': tag, 'download_url': asset_url, 'asset_name': asset_name, 'body': body}
+    if not tag:
+        return None, "릴리스에 태그가 없음"
+    if not asset_url:
+        return None, f"릴리스 {tag}에 첨부된 .zip 파일이 없음"
+    return ({'version': tag, 'download_url': asset_url,
+             'asset_name': asset_name, 'body': body}, '')
+
+
+# ---------------------------------------------------------------------------
+# Bethlehem (Hebrew/Greek) data — Strong's-tagged original-language Bibles
+#   Lives in BethlehemWin/ folder if present; tab is disabled when missing.
+# ---------------------------------------------------------------------------
+
+BETHLEHEM_DIR = "BethlehemWin"
+
+# Bethlehem dbs use 1..66 Protestant numbering. Map to/from our 10..730 scheme
+# (deuterocanonical slots 170,180,200,210,270,280,320 are skipped).
+PROTESTANT_BOOK_ORDER = [
+    10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+    110, 120, 130, 140, 150, 160, 190,
+    220, 230, 240, 250, 260,
+    290, 300, 310, 330, 340,
+    350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460,
+    470, 480, 490, 500, 510, 520, 530, 540, 550, 560,
+    570, 580, 590, 600, 610, 620, 630, 640, 650, 660,
+    670, 680, 690, 700, 710, 720, 730,
+]
+OUR_TO_BETHLEHEM = {b: i + 1 for i, b in enumerate(PROTESTANT_BOOK_ORDER)}
+BETHLEHEM_TO_OUR = {i + 1: b for i, b in enumerate(PROTESTANT_BOOK_ORDER)}
+
+
+class BethlehemDB:
+    """Thin wrapper around a Bethlehem SQLite Bible (Bible(book,chapter,verse,btext))."""
+
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.name = os.path.splitext(os.path.basename(db_path))[0]
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+
+    def get_chapter_verses(self, our_book_num, chapter):
+        bn = OUR_TO_BETHLEHEM.get(our_book_num)
+        if bn is None:
+            return []
+        cur = self.conn.cursor()
+        cur.execute("SELECT verse, btext FROM Bible WHERE book=? AND chapter=? ORDER BY verse",
+                    (bn, chapter))
+        return cur.fetchall()
+
+    def get_chapter_count(self, our_book_num):
+        bn = OUR_TO_BETHLEHEM.get(our_book_num)
+        if bn is None:
+            return 0
+        cur = self.conn.cursor()
+        cur.execute("SELECT MAX(chapter) FROM Bible WHERE book=?", (bn,))
+        row = cur.fetchone()
+        return row[0] if row and row[0] else 0
+
+    def close(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+
+
+class Lexicon:
+    """Strong's dictionary (Lexicon(scode, dtext)). scode is 'H1234' or 'G1234'."""
+
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+
+    def lookup(self, code):
+        cur = self.conn.cursor()
+        cur.execute("SELECT dtext FROM Lexicon WHERE scode=?", (code,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    def close(self):
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+
+
+# Each word block in 원전분해.sdb btext looks like:
+#   [surface] (기본 <WH7225> [lemma] translit)@POS # gloss*
+# Blocks are separated by '*' followed by newline/space.
+WONJUN_BLOCK = re.compile(
+    r'\[(?P<surface>[^\]]+)\]\s*'
+    r'\(\s*기본\s*<W(?P<lang>[HG])(?P<num>\d+)>\s*'
+    r'\[(?P<lemma>[^\]]+)\]\s*(?P<translit>[^)]*)\)\s*'
+    r'@\s*(?P<pos>[^#*]*?)\s*'
+    r'(?:#\s*(?P<gloss>[^*]*?))?\s*\*',
+    re.DOTALL,
+)
+
+
+KOREAN_STRONG_TAG = re.compile(r'<W([HG])(\d+)>')
+
+
+def parse_korean_strongs(text):
+    """Parse Korean Strong's-tagged text into a list of (word, code) tuples.
+
+    Each '<WHxxxx>' or '<WGxxxx>' tag belongs to the text immediately before it
+    (which may include spaces, e.g. '위에 있고<WH5921>'). Trailing text without
+    a tag is appended with code=None.
+    """
+    out = []
+    last_end = 0
+    for m in KOREAN_STRONG_TAG.finditer(text or ''):
+        word = (text[last_end:m.start()]).strip()
+        if word:
+            out.append((word, f"{m.group(1)}{m.group(2)}"))
+        last_end = m.end()
+    trail = (text[last_end:] if text else '').strip()
+    if trail:
+        out.append((trail, None))
+    return out
+
+
+def parse_wonjun_verse(text):
+    """Parse 원전분해 verse text into list of word dicts."""
+    out = []
+    if not text:
+        return out
+    for m in WONJUN_BLOCK.finditer(text):
+        out.append({
+            'surface': m.group('surface').strip(),
+            'code': f"{m.group('lang')}{m.group('num')}",
+            'lemma': m.group('lemma').strip(),
+            'translit': (m.group('translit') or '').strip(),
+            'pos': (m.group('pos') or '').strip(),
+            'gloss': (m.group('gloss') or '').strip(),
+        })
+    return out
+
+
+def render_dict_html(text_widget, html, base_font=('Malgun Gothic', 10), fg='#000000'):
+    """Render HTML-marked dictionary text into a Tk Text widget.
+
+    Handles a small subset: <font color>, <b>, <br>, <sup>, <num>, '^' separator.
+    """
+    from html.parser import HTMLParser
+
+    text_widget.configure(state=tk.NORMAL)
+    text_widget.delete('1.0', tk.END)
+
+    bold_font = (base_font[0], base_font[1], 'bold')
+    text_widget.tag_configure('_b', font=bold_font)
+    text_widget.tag_configure('_sup', offset=4, font=(base_font[0], max(7, base_font[1] - 3)))
+    text_widget.tag_configure('_num', foreground='#1E40AF', underline=True)
+
+    counter = [0]
+
+    class _R(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.stack = []
+
+        def handle_starttag(self, tag, attrs):
+            tag = tag.lower()
+            ad = dict(attrs)
+            if tag == 'br':
+                text_widget.insert(tk.END, '\n')
+                return
+            if tag == 'font':
+                color = ad.get('color') or fg
+                tname = f'_fc_{counter[0]}'
+                counter[0] += 1
+                text_widget.tag_configure(tname, foreground=color)
+                self.stack.append((tag, tname))
+            elif tag == 'b':
+                self.stack.append((tag, '_b'))
+            elif tag == 'sup':
+                self.stack.append((tag, '_sup'))
+            elif tag == 'num':
+                self.stack.append((tag, '_num'))
+
+        def handle_endtag(self, tag):
+            tag = tag.lower()
+            for i in range(len(self.stack) - 1, -1, -1):
+                if self.stack[i][0] == tag:
+                    self.stack.pop(i)
+                    return
+
+        def handle_data(self, data):
+            if not data:
+                return
+            # '^' is used as a separator in some entries; replace with newline.
+            data = data.replace('^', '  ')
+            tags = tuple(t[1] for t in self.stack)
+            text_widget.insert(tk.END, data, tags)
+
+    _R().feed(html or '')
+    text_widget.configure(state=tk.DISABLED)
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +728,7 @@ LIGHT_THEME = {
     'bg': '#FFFFFF', 'fg': '#1A1A2E',
     'viewer_bg': '#FAFAFA', 'viewer_fg': '#1A1A2E',
     'highlight_bg': '#FFE082', 'highlight_fg': '#1A1A2E',
+    'select_bg': '#0D47A1', 'select_fg': '#FFFFFF',
     'accent': '#1565C0', 'accent_hover': '#0D47A1',
     'button_bg': '#E3F2FD', 'button_fg': '#1565C0', 'button_active': '#BBDEFB',
     'frame_bg': '#F5F5F5',
@@ -524,6 +747,7 @@ DARK_THEME = {
     'bg': '#1E1E2E', 'fg': '#CDD6F4',
     'viewer_bg': '#181825', 'viewer_fg': '#CDD6F4',
     'highlight_bg': '#F9E2AF', 'highlight_fg': '#1E1E2E',
+    'select_bg': '#1E40AF', 'select_fg': '#FFFFFF',
     'accent': '#89B4FA', 'accent_hover': '#74C7EC',
     'button_bg': '#313244', 'button_fg': '#89B4FA', 'button_active': '#45475A',
     'frame_bg': '#1E1E2E',
@@ -730,9 +954,12 @@ class AutoBibleApp:
         self.monitor_thread = None
         self.last_clipboard = ''
         self.settings = dict(self.DEFAULT_SETTINGS)
+        self._sync_lock = False        # viewer ↔ middle scroll sync guard
+        self._sync_pending = False     # debounce pending
 
         # Load databases
         self._load_databases()
+        self._load_bethlehem()
 
         # Load settings
         self._load_settings()
@@ -777,6 +1004,39 @@ class AutoBibleApp:
                 except Exception as e:
                     print(f"Error loading {fname}: {e}")
 
+    def _load_bethlehem(self):
+        """Load KRV-with-Strong's + lexicons from BethlehemWin folder if present."""
+        self.bethlehem_strongs = None  # 개역한글S — KRV-based, drives middle panel
+        self.bethlehem_wonjun = None   # 원전분해 — kept for potential future use
+        self.lexicon_ko = None
+        self.lexicon_en = None
+        bdir = os.path.join(BASE_DIR, BETHLEHEM_DIR)
+        if not os.path.isdir(bdir):
+            return
+        strongs_path = os.path.join(bdir, '개역한글S.sdb')
+        if os.path.exists(strongs_path):
+            try:
+                self.bethlehem_strongs = BethlehemDB(strongs_path)
+            except Exception as e:
+                print(f"개역한글S load error: {e}")
+        wonjun_path = os.path.join(bdir, '원전분해.sdb')
+        if os.path.exists(wonjun_path):
+            try:
+                self.bethlehem_wonjun = BethlehemDB(wonjun_path)
+            except Exception as e:
+                print(f"원전분해 load error: {e}")
+        for fname, attr in (('HebGrkKo.dct', 'lexicon_ko'),
+                            ('HebGrkEn.dct', 'lexicon_en')):
+            p = os.path.join(bdir, fname)
+            if os.path.exists(p):
+                try:
+                    setattr(self, attr, Lexicon(p))
+                except Exception as e:
+                    print(f"{fname} load error: {e}")
+
+    def _bethlehem_ready(self):
+        return bool(self.bethlehem_strongs and (self.lexicon_ko or self.lexicon_en))
+
     def _refresh_databases(self):
         """Rescan bible_versions folder for new DB files."""
         db_dir = os.path.join(BASE_DIR, BIBLE_DIR)
@@ -818,11 +1078,15 @@ class AutoBibleApp:
         valid_order = [n for n in self.settings['output_order'] if n in self.bible_dbs]
         self.settings['output_order'] = valid_order
 
-        # Validate viewer_versions; default to one Korean (or first available) if empty
+        # Validate viewer_versions; default to KRV (or next-best Korean) when empty.
         valid_viewer = [n for n in self.settings.get('viewer_versions', []) if n in self.bible_dbs]
+        # Migration from v1.0.0: previous default was alphabetical ['KNRSV'].
+        # If the saved choice is exactly that default and KRV is available, switch.
+        if valid_viewer == ['KNRSV'] and 'KRV' in self.bible_dbs:
+            valid_viewer = ['KRV']
         if not valid_viewer and self.bible_dbs:
             versions = list(self.bible_dbs.keys())
-            korean_pref = [v for v in versions if v in ('NRKV', 'KRV', 'KNRSV')]
+            korean_pref = [v for v in ('KRV', 'NRKV', 'KNRSV') if v in versions]
             valid_viewer = [korean_pref[0] if korean_pref else versions[0]]
         self.settings['viewer_versions'] = valid_viewer
 
@@ -903,39 +1167,23 @@ class AutoBibleApp:
             relief=tk.FLAT, cursor='hand2', command=self._toggle_dark_mode)
         self.dark_btn.pack(side=tk.RIGHT, padx=4)
 
+        self.update_check_btn = tk.Button(
+            self.top_bar, text=" 업데이트 확인 ", font=('Segoe UI', 9),
+            relief=tk.FLAT, cursor='hand2', command=self._manual_update_check)
+        self.update_check_btn.pack(side=tk.RIGHT, padx=4)
+
     # ---- Viewer Tab ----
 
     def _build_viewer_tab(self):
-        # Left: log, Right: viewer
-        pw = tk.PanedWindow(self.tab_viewer, orient=tk.HORIZONTAL, sashwidth=4)
-        pw.pack(fill=tk.BOTH, expand=True)
-        self.viewer_pane = pw
+        # Layout:
+        #   [version chips row + dict lang toggle on the right]
+        #   [nav row: book/chap/prev/next/verse-jump/font]
+        #   ├─ horizontal 3-panel: 본문 (50%) | 원어 (25%) | 사전 (25%) ─┤
+        #   └─ activity log (full width across bottom)
+        self.viewer_outer = self.tab_viewer
 
-        # Left - activity log
-        left = tk.Frame(pw)
-        pw.add(left, minsize=220, stretch="never")
-        self.log_frame = left
-
-        log_lbl = tk.Label(left, text="활동 로그", font=('Segoe UI', 10, 'bold'))
-        log_lbl.pack(anchor=tk.W, padx=8, pady=(8, 4))
-        self._log_label = log_lbl
-
-        log_inner = tk.Frame(left)
-        log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
-        self.log_text = tk.Text(log_inner, font=('Consolas', 9), wrap=tk.WORD,
-                                  state=tk.DISABLED, width=30)
-        self.log_scroll = tk.Scrollbar(log_inner, command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=self.log_scroll.set)
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Right - bible viewer
-        right = tk.Frame(pw)
-        pw.add(right, minsize=400, stretch="always")
-        self.viewer_outer = right
-
-        # Version chip bar (multi-version parallel view + reorder)
-        version_bar = tk.Frame(right)
+        # Version chip bar (multi-version parallel view + reorder) — top row
+        version_bar = tk.Frame(self.tab_viewer)
         version_bar.pack(fill=tk.X, padx=4, pady=(4, 0))
         self.version_bar = version_bar
 
@@ -956,7 +1204,7 @@ class AutoBibleApp:
         self._render_viewer_versions()
 
         # Navigation
-        nav = tk.Frame(right)
+        nav = tk.Frame(self.tab_viewer)
         nav.pack(fill=tk.X, padx=4, pady=(4, 0))
         self.nav_frame = nav
 
@@ -1002,17 +1250,109 @@ class AutoBibleApp:
                                           command=lambda: self._change_font_size(-1))
         self.font_minus_btn.pack(side=tk.RIGHT, padx=2)
 
-        # Text
-        tf = tk.Frame(right)
-        tf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.viewer_text_frame = tf
+        # Dictionary language toggle (right side, before font buttons in pack order
+        # so visually it appears to the left of A-/A+ since side=RIGHT stacks RTL)
+        has_ko = self.lexicon_ko is not None
+        has_en = self.lexicon_en is not None
+        default_lang = 'ko' if has_ko else 'en'
+        self.lex_lang_var = tk.StringVar(value=default_lang)
+        self.lex_lang_en_rb = tk.Radiobutton(
+            nav, text='영어', variable=self.lex_lang_var, value='en',
+            font=('Segoe UI', 9),
+            state=(tk.NORMAL if has_en else tk.DISABLED),
+            command=self._on_lex_lang_changed)
+        self.lex_lang_en_rb.pack(side=tk.RIGHT)
+        self.lex_lang_ko_rb = tk.Radiobutton(
+            nav, text='한글', variable=self.lex_lang_var, value='ko',
+            font=('Segoe UI', 9),
+            state=(tk.NORMAL if has_ko else tk.DISABLED),
+            command=self._on_lex_lang_changed)
+        self.lex_lang_ko_rb.pack(side=tk.RIGHT)
+        self.lex_lang_label = tk.Label(nav, text="사전:", font=('Segoe UI', 9))
+        self.lex_lang_label.pack(side=tk.RIGHT, padx=(8, 4))
 
+        # Main vertical PanedWindow: 3-panel area (top) + activity log (bottom)
+        vpw = tk.PanedWindow(self.tab_viewer, orient=tk.VERTICAL, sashwidth=4)
+        vpw.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.viewer_pane = vpw
+
+        # Top: horizontal PanedWindow with 3 panels
+        main_top = tk.Frame(vpw)
+        vpw.add(main_top, minsize=240, stretch="always")
+        hpw = tk.PanedWindow(main_top, orient=tk.HORIZONTAL, sashwidth=4)
+        hpw.pack(fill=tk.BOTH, expand=True)
+        self.viewer_hpane = hpw
+
+        # Panel 1: regular Bible viewer (existing)
+        tf = tk.Frame(hpw)
+        hpw.add(tf, minsize=300, stretch="always")
+        self.viewer_text_frame = tf
         self.viewer_text = tk.Text(tf, font=('Malgun Gothic', 11), wrap=tk.WORD,
-                                     state=tk.DISABLED, spacing1=2, spacing3=2, padx=12, pady=8)
+                                     state=tk.DISABLED, spacing1=2, spacing3=2,
+                                     padx=12, pady=8)
         self.viewer_scroll = tk.Scrollbar(tf, command=self.viewer_text.yview)
-        self.viewer_text.configure(yscrollcommand=self.viewer_scroll.set)
+        self.viewer_text.configure(yscrollcommand=self._on_viewer_yscroll)
         self.viewer_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.viewer_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Panel 2: original-language Korean + Strong's code (clickable)
+        mid = tk.Frame(hpw)
+        hpw.add(mid, minsize=150, stretch="always")
+        self.lex_mid_frame = mid
+        self.lex_mid_label = tk.Label(mid, text="원어 (단어 클릭)", font=('Segoe UI', 9, 'bold'))
+        self.lex_mid_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
+        mf = tk.Frame(mid)
+        mf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.lex_mid_text = tk.Text(mf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+                                      state=tk.DISABLED, spacing1=2, spacing3=2,
+                                      padx=8, pady=6)
+        self.lex_mid_scroll = tk.Scrollbar(mf, command=self.lex_mid_text.yview)
+        self.lex_mid_text.configure(yscrollcommand=self.lex_mid_scroll.set)
+        self.lex_mid_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.lex_mid_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.lex_mid_text.tag_configure('lex_vnum', font=('Malgun Gothic', 9, 'bold'))
+        self.lex_mid_text.tag_configure('lex_word')
+        self.lex_mid_text.tag_bind('lex_word', '<Enter>',
+                                    lambda e: self.lex_mid_text.configure(cursor='hand2'))
+        self.lex_mid_text.tag_bind('lex_word', '<Leave>',
+                                    lambda e: self.lex_mid_text.configure(cursor=''))
+        self.lex_mid_text.bind('<Button-1>', self._on_lex_word_click)
+
+        # Panel 3: dictionary entry
+        rg = tk.Frame(hpw)
+        hpw.add(rg, minsize=150, stretch="always")
+        self.lex_right_frame = rg
+        self.lex_right_label = tk.Label(rg, text="사전", font=('Segoe UI', 9, 'bold'))
+        self.lex_right_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
+        rgf = tk.Frame(rg)
+        rgf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.lex_right_text = tk.Text(rgf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+                                        state=tk.DISABLED, spacing1=2, spacing3=2,
+                                        padx=8, pady=6)
+        self.lex_right_scroll = tk.Scrollbar(rgf, command=self.lex_right_text.yview)
+        self.lex_right_text.configure(yscrollcommand=self.lex_right_scroll.set)
+        self.lex_right_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.lex_right_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self._current_lex_code = None
+
+        # Bottom: activity log spanning the full width across the 3 panels
+        log_frame = tk.Frame(vpw)
+        vpw.add(log_frame, minsize=80, stretch="never")
+        self.log_frame = log_frame
+
+        log_lbl = tk.Label(log_frame, text="활동 로그", font=('Segoe UI', 9, 'bold'))
+        log_lbl.pack(anchor=tk.W, padx=8, pady=(4, 2))
+        self._log_label = log_lbl
+
+        log_inner = tk.Frame(log_frame)
+        log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
+        self.log_text = tk.Text(log_inner, font=('Consolas', 9), wrap=tk.WORD,
+                                  state=tk.DISABLED, height=4)
+        self.log_scroll = tk.Scrollbar(log_inner, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=self.log_scroll.set)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         self._apply_viewer_font()
 
@@ -1231,6 +1571,63 @@ class AutoBibleApp:
         for w in sf.winfo_children():
             if isinstance(w, tk.Label):
                 self._settings_header_labels.append(w)
+
+    # ---- Lexicon (원어 사전) helpers — used by viewer tab ----
+
+    def _render_lex_middle(self, our_bn, chapter):
+        text = self.lex_mid_text
+        text.configure(state=tk.NORMAL)
+        text.delete('1.0', tk.END)
+        if not self.bethlehem_strongs:
+            text.insert(tk.END, "원어 사전 데이터가 없습니다.\n"
+                                "BethlehemWin 폴더에 개역한글S.sdb가 필요합니다.")
+            text.configure(state=tk.DISABLED)
+            return
+        verses = self.bethlehem_strongs.get_chapter_verses(our_bn, chapter)
+        for vn, btext in verses:
+            block = f'vb_{vn}'
+            words = parse_korean_strongs(btext)
+            text.insert(tk.END, f"{vn}  ", ('lex_vnum', block))
+            for i, (word, code) in enumerate(words):
+                if i > 0:
+                    text.insert(tk.END, ' ', (block,))
+                if code and code not in ('H0', 'G0'):
+                    tag = f"sw_{code}"
+                    text.tag_configure(tag)  # marker tag for click identification
+                    text.insert(tk.END, f"{word}[{code}]", ('lex_word', tag, block))
+                else:
+                    text.insert(tk.END, word, (block,))
+            text.insert(tk.END, '\n\n', (block,))
+        text.configure(state=tk.DISABLED)
+
+    def _on_lex_word_click(self, event):
+        idx = self.lex_mid_text.index(f"@{event.x},{event.y}")
+        for tag in self.lex_mid_text.tag_names(idx):
+            if tag.startswith('sw_'):
+                self._show_lex_entry(tag[3:])
+                return
+
+    def _on_lex_lang_changed(self):
+        if self._current_lex_code:
+            self._show_lex_entry(self._current_lex_code)
+
+    def _show_lex_entry(self, code):
+        self._current_lex_code = code
+        lang = self.lex_lang_var.get()
+        lex = self.lexicon_ko if lang == 'ko' else self.lexicon_en
+        if not lex:
+            return
+        entry = lex.lookup(code)
+        if entry is None:
+            self.lex_right_text.configure(state=tk.NORMAL)
+            self.lex_right_text.delete('1.0', tk.END)
+            self.lex_right_text.insert(tk.END, f"[{code}] 사전 항목 없음")
+            self.lex_right_text.configure(state=tk.DISABLED)
+            return
+        fg = self.theme['viewer_fg'] if hasattr(self, 'theme') else '#000000'
+        render_dict_html(self.lex_right_text,
+                         f"<b>[{code}]</b><br><br>{entry}",
+                         fg=fg)
 
     # ---- Version order management ----
 
@@ -1638,16 +2035,129 @@ class AutoBibleApp:
 
         self.viewer_text.configure(state=tk.DISABLED)
 
-        if first_hl:
-            self.root.after(50, lambda: self.viewer_text.see(first_hl))
+        # Render the original-language middle panel BEFORE scrolling so the sync
+        # finds vb_* tags on the new chapter, not the previous one.
+        if hasattr(self, 'lex_mid_text') and self._bethlehem_ready():
+            self._render_lex_middle(bn, chapter)
+
+        # Position the requested (or first) verse at the top of both panels.
+        if highlight_verses:
+            target_v = min(highlight_verses)
+        elif sorted_verses:
+            target_v = sorted_verses[0]
+        else:
+            target_v = None
+        if target_v is not None:
+            self.root.after(50, lambda v=target_v: self._scroll_both_to_verse(v))
 
     def _on_verse_jump(self, event):
         v = self.verse_jump_var.get().strip()
         if v.isdigit():
             try:
-                self.viewer_text.see(f'verse_{v}')
+                self._scroll_both_to_verse(int(v))
             except Exception:
                 pass
+
+    # ---- Scroll sync (viewer → middle, one-way) ----
+
+    def _scroll_text_to_verse(self, widget, verse_num):
+        """Place vb_<verse_num>'s first line precisely at the top of the viewport.
+
+        Uses display-line counts (wrap-aware) so the fraction passed to
+        yview_moveto matches Tk's internal display-line interpretation. This
+        avoids the top-edge clipping that happens when fractions are computed
+        from logical line numbers while the widget wraps.
+        """
+        try:
+            ranges = widget.tag_ranges(f'vb_{verse_num}')
+        except Exception:
+            return
+        if not ranges:
+            return
+        idx = widget.index(ranges[0])
+        try:
+            widget.update_idletasks()
+            above = widget.count('1.0', idx, 'displaylines')
+            total = widget.count('1.0', 'end', 'displaylines')
+        except Exception:
+            return
+        if isinstance(above, (list, tuple)):
+            above = above[0] if above else 0
+        if isinstance(total, (list, tuple)):
+            total = total[0] if total else 0
+        above = above or 0
+        total = total or 0
+        if total <= 0:
+            return
+        fraction = max(0.0, min(1.0, above / total))
+        try:
+            widget.yview_moveto(fraction)
+        except Exception:
+            pass
+
+    def _topmost_verse_in_viewer(self):
+        """First fully visible verse in viewer_text (Option B definition).
+
+        A line is 'fully visible at top' when dlineinfo.y >= 0 (its top edge is
+        at or below the viewport's top edge). Skip lines without a vb_* tag.
+        """
+        text = self.viewer_text
+        try:
+            text.update_idletasks()
+            end_line = int(str(text.index('end-1c')).split('.')[0])
+        except Exception:
+            return None
+        for ln in range(1, end_line + 1):
+            info = text.dlineinfo(f'{ln}.0')
+            if info is None:
+                continue  # not in viewport
+            y = info[1]
+            if y < 0:
+                continue  # top of this line is clipped — Option B skips it
+            for tag in text.tag_names(f'{ln}.0'):
+                if tag.startswith('vb_'):
+                    try:
+                        return int(tag[3:])
+                    except ValueError:
+                        pass
+            # blank line (no vb_*) — walk forward
+        return None
+
+    def _on_viewer_yscroll(self, *args):
+        """yscrollcommand wrapper: drive scrollbar + queue middle-panel sync."""
+        try:
+            self.viewer_scroll.set(*args)
+        except Exception:
+            pass
+        if getattr(self, '_sync_lock', False):
+            return
+        if getattr(self, '_sync_pending', False):
+            return
+        self._sync_pending = True
+        self.root.after(40, self._do_sync_middle_to_viewer)
+
+    def _do_sync_middle_to_viewer(self):
+        self._sync_pending = False
+        if self._sync_lock or not hasattr(self, 'lex_mid_text'):
+            return
+        v = self._topmost_verse_in_viewer()
+        if v is None:
+            return
+        self._sync_lock = True
+        try:
+            self._scroll_text_to_verse(self.lex_mid_text, v)
+        finally:
+            self._sync_lock = False
+
+    def _scroll_both_to_verse(self, verse_num):
+        """Programmatic scroll: place verse_num at the top of both panels."""
+        self._sync_lock = True
+        try:
+            self._scroll_text_to_verse(self.viewer_text, verse_num)
+            if hasattr(self, 'lex_mid_text'):
+                self._scroll_text_to_verse(self.lex_mid_text, verse_num)
+        finally:
+            self._sync_lock = False
 
     # ---- Font size ----
 
@@ -1921,6 +2431,7 @@ class AutoBibleApp:
         self.title_label.configure(bg=t['bg'], fg=t['accent'])
         self._style_button(self.monitor_btn)
         self._style_button(self.dark_btn)
+        self._style_button(self.update_check_btn)
         self._update_status("모니터링 중" if self.monitoring else "대기 중", self.monitoring)
 
         # Tabs
@@ -1962,14 +2473,18 @@ class AutoBibleApp:
                                           highlightthickness=1, highlightcolor=t['accent'],
                                           highlightbackground=t['border'])
         self.viewer_text_frame.configure(bg=t['bg'])
+        sel_bg, sel_fg = t['select_bg'], t['select_fg']
         self.viewer_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
                                      insertbackground=t['fg'],
-                                     selectbackground=t['accent'], selectforeground='#FFFFFF')
-        self.viewer_text.tag_configure('verse_num', foreground=t['verse_num'])
+                                     selectbackground=sel_bg, selectforeground=sel_fg)
+        self.viewer_text.tag_configure('verse_num', foreground=t['verse_num'],
+                                         selectbackground=sel_bg, selectforeground=sel_fg)
         self.viewer_text.tag_configure('highlight', background=t['highlight_bg'],
-                                         foreground=t['highlight_fg'])
+                                         foreground=t['highlight_fg'],
+                                         selectbackground=sel_bg, selectforeground=sel_fg)
         self.viewer_text.tag_configure('highlight_num', foreground=t['highlight_fg'],
-                                         background=t['highlight_bg'])
+                                         background=t['highlight_bg'],
+                                         selectbackground=sel_bg, selectforeground=sel_fg)
         self.viewer_scroll.configure(bg=t['frame_bg'], troughcolor=t['viewer_bg'])
 
         # --- Settings tab ---
@@ -2036,6 +2551,34 @@ class AutoBibleApp:
         self.preview_text.configure(bg=t['preview_bg'], fg=t['preview_fg'],
                                       insertbackground=t['fg'])
 
+        # --- Lexicon panels inside viewer tab + dict language toggle ---
+        if hasattr(self, 'lex_lang_label'):
+            self.lex_lang_label.configure(bg=t['bg'], fg=t['fg'])
+            for rb in (self.lex_lang_ko_rb, self.lex_lang_en_rb):
+                rb.configure(bg=t['bg'], fg=t['fg'],
+                             selectcolor=t['radio_sel'],
+                             activebackground=t['bg'], activeforeground=t['fg'],
+                             highlightthickness=0)
+        if hasattr(self, 'viewer_hpane'):
+            self.viewer_hpane.configure(bg=t['bg'], sashrelief=tk.FLAT)
+        if hasattr(self, 'lex_mid_text'):
+            sel_bg, sel_fg = t['select_bg'], t['select_fg']
+            for frm, lbl, txt, scr in (
+                (self.lex_mid_frame, self.lex_mid_label, self.lex_mid_text, self.lex_mid_scroll),
+                (self.lex_right_frame, self.lex_right_label, self.lex_right_text, self.lex_right_scroll),
+            ):
+                frm.configure(bg=t['bg'])
+                for c in frm.winfo_children():
+                    if isinstance(c, tk.Frame):
+                        c.configure(bg=t['bg'])
+                lbl.configure(bg=t['bg'], fg=t['fg'])
+                txt.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
+                              insertbackground=t['fg'],
+                              selectbackground=sel_bg, selectforeground=sel_fg)
+                scr.configure(bg=t['frame_bg'], troughcolor=t['viewer_bg'])
+            self.lex_mid_text.tag_configure('lex_vnum', foreground=t['verse_num'])
+            self.lex_mid_text.tag_configure('lex_word', foreground=t['accent'])
+
     def _apply_viewer_chip_theme(self):
         t = getattr(self, 'theme', None)
         if not t:
@@ -2063,23 +2606,72 @@ class AutoBibleApp:
 
     # ---- Auto-update ----
 
+    def _log_update(self, msg):
+        try:
+            path = os.path.join(BASE_DIR, 'update_check.log')
+            ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(f'[{ts}] {msg}\n')
+        except Exception:
+            pass
+
     def _start_update_check(self):
         if not getattr(sys, 'frozen', False):
-            return  # Skip when running from source
+            self._log_update('자동 체크 스킵 (소스 모드)')
+            return
         threading.Thread(target=self._update_check_worker, daemon=True).start()
 
     def _update_check_worker(self):
-        info = fetch_latest_release()
+        self._log_update(f'자동 체크 시작 (현재 v{__version__})')
+        info, error = fetch_latest_release()
         if not info:
+            self._log_update(f'체크 실패: {error}')
+            return
+        self._log_update(f'최신 릴리스: {info["version"]}')
+        latest = parse_version(info['version'])
+        current = parse_version(__version__)
+        if latest <= current:
+            self._log_update('이미 최신 버전')
+            return
+        if self.settings.get('skip_update_version', '') == info['version']:
+            self._log_update(f'사용자가 {info["version"]} 건너뛰기 설정')
+            return
+        self.update_info = info
+        self.root.after(0, self._show_update_banner)
+
+    def _manual_update_check(self):
+        if hasattr(self, 'update_check_btn'):
+            self.update_check_btn.configure(text=" 확인 중... ", state=tk.DISABLED)
+        threading.Thread(target=self._manual_update_check_worker, daemon=True).start()
+
+    def _manual_update_check_worker(self):
+        self._log_update('수동 체크 시작')
+        info, error = fetch_latest_release()
+        self.root.after(0, lambda: self._manual_update_check_done(info, error))
+
+    def _manual_update_check_done(self, info, error):
+        if hasattr(self, 'update_check_btn'):
+            self.update_check_btn.configure(text=" 업데이트 확인 ", state=tk.NORMAL)
+        if error:
+            self._log_update(f'수동 체크 실패: {error}')
+            messagebox.showerror("업데이트 확인 실패",
+                f"릴리스 정보를 가져오지 못했습니다.\n\n오류: {error}\n\n"
+                f"로그: {os.path.join(BASE_DIR, 'update_check.log')}")
+            return
+        if not info:
+            messagebox.showinfo("업데이트", "릴리스 정보가 없습니다.")
             return
         latest = parse_version(info['version'])
         current = parse_version(__version__)
         if latest <= current:
+            self._log_update(f'수동 체크 결과: 이미 최신 (v{__version__})')
+            messagebox.showinfo("업데이트",
+                f"이미 최신 버전입니다 (v{__version__}).\n"
+                f"GitHub 최신 릴리스: {info['version']}")
             return
-        if self.settings.get('skip_update_version', '') == info['version']:
-            return
+        self._log_update(f'수동 체크 결과: 새 버전 {info["version"]} 발견')
         self.update_info = info
-        self.root.after(0, self._show_update_banner)
+        self._show_update_banner()
 
     def _show_update_banner(self):
         info = self.update_info

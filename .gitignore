@@ -22,3 +22,7 @@ Thumbs.db
 # Misc local files
 image.jpg
 사용법.txt
+*.png
+
+# Bethlehem original-language data (large, distributed separately)
+BethlehemWin/
