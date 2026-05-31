@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.4.1"
+__version__ = "1.5.0"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -38,6 +38,14 @@ elif IS_WINDOWS:
 else:  # Linux / other
     APP_FONT = 'Noto Sans CJK KR'
 UI_FONT = BODY_FONT = MONO_FONT = APP_FONT
+
+# Serif font for scripture body (editorial "book" feel); each is OS-default.
+if sys.platform == 'darwin':
+    SERIF_FONT = 'AppleMyungjo'
+elif IS_WINDOWS:
+    SERIF_FONT = '바탕'
+else:
+    SERIF_FONT = 'Noto Serif CJK KR'
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
@@ -654,7 +662,8 @@ def parse_wonjun_verse(text):
     return out
 
 
-def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000'):
+def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000',
+                     num_color='#6D4DFF'):
     """Render HTML-marked dictionary text into a Tk Text widget.
 
     Handles a small subset: <font color>, <b>, <br>, <sup>, <num>, '^' separator.
@@ -667,7 +676,7 @@ def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000')
     bold_font = (base_font[0], base_font[1], 'bold')
     text_widget.tag_configure('_b', font=bold_font)
     text_widget.tag_configure('_sup', offset=4, font=(base_font[0], max(7, base_font[1] - 3)))
-    text_widget.tag_configure('_num', foreground='#1E40AF', underline=True)
+    text_widget.tag_configure('_num', foreground=num_color, underline=True)
 
     counter = [0]
 
@@ -949,45 +958,45 @@ class BibleDB:
 # ---------------------------------------------------------------------------
 
 LIGHT_THEME = {
-    'bg': '#FFFFFF', 'fg': '#1A1A2E',
-    'viewer_bg': '#FAFAFA', 'viewer_fg': '#1A1A2E',
-    'highlight_bg': '#FFE082', 'highlight_fg': '#1A1A2E',
-    'select_bg': '#0D47A1', 'select_fg': '#FFFFFF',
-    'scroll_thumb': '#B0B4BC', 'scroll_trough': '#ECECEC', 'scroll_active': '#8A9099',
-    'lex_hl_bg': '#FFF176',
-    'accent': '#1565C0', 'accent_hover': '#0D47A1',
-    'button_bg': '#E3F2FD', 'button_fg': '#1565C0', 'button_active': '#BBDEFB',
-    'frame_bg': '#F5F5F5',
-    'entry_bg': '#FFFFFF', 'entry_fg': '#1A1A2E',
-    'border': '#E0E0E0', 'verse_num': '#1565C0',
-    'status_bg': '#E8F5E9', 'status_fg': '#2E7D32',
-    'status_off_bg': '#FFEBEE', 'status_off_fg': '#C62828',
-    'separator': '#E0E0E0',
-    'listbox_bg': '#FFFFFF', 'listbox_fg': '#1A1A2E',
-    'listbox_sel_bg': '#BBDEFB', 'listbox_sel_fg': '#1A1A2E',
-    'preview_bg': '#F0F4FF', 'preview_fg': '#1A1A2E',
-    'radio_bg': '#F5F5F5', 'radio_fg': '#1A1A2E', 'radio_sel': '#FFFFFF',
+    'bg': '#F6F5FB', 'fg': '#23202E',
+    'viewer_bg': '#FFFFFF', 'viewer_fg': '#262333',
+    'highlight_bg': '#FFE39A', 'highlight_fg': '#2A2010',
+    'select_bg': '#6D4DFF', 'select_fg': '#FFFFFF',
+    'scroll_thumb': '#CAC4DD', 'scroll_trough': '#ECE9F4', 'scroll_active': '#A79FC4',
+    'lex_hl_bg': '#EBE4FF',
+    'accent': '#6D4DFF', 'accent_hover': '#5A3FE0',
+    'button_bg': '#F0ECFA', 'button_fg': '#5A3FD0', 'button_active': '#E2DAF6',
+    'frame_bg': '#F0EEF7',
+    'entry_bg': '#FFFFFF', 'entry_fg': '#262333',
+    'border': '#E4DEF2', 'verse_num': '#6D4DFF',
+    'status_bg': '#E7F6EC', 'status_fg': '#2E8B57',
+    'status_off_bg': '#FCEAEE', 'status_off_fg': '#C0395A',
+    'separator': '#E4DEF2',
+    'listbox_bg': '#FFFFFF', 'listbox_fg': '#262333',
+    'listbox_sel_bg': '#EBE4FF', 'listbox_sel_fg': '#3A2E78',
+    'preview_bg': '#F4F1FD', 'preview_fg': '#262333',
+    'radio_bg': '#F0EEF7', 'radio_fg': '#23202E', 'radio_sel': '#FFFFFF',
 }
 
 DARK_THEME = {
-    'bg': '#1E1E2E', 'fg': '#CDD6F4',
-    'viewer_bg': '#181825', 'viewer_fg': '#CDD6F4',
-    'highlight_bg': '#F9E2AF', 'highlight_fg': '#1E1E2E',
-    'select_bg': '#1E40AF', 'select_fg': '#FFFFFF',
-    'scroll_thumb': '#6C7086', 'scroll_trough': '#11111B', 'scroll_active': '#9399B2',
-    'lex_hl_bg': '#585B70',
-    'accent': '#89B4FA', 'accent_hover': '#74C7EC',
-    'button_bg': '#313244', 'button_fg': '#89B4FA', 'button_active': '#45475A',
-    'frame_bg': '#1E1E2E',
-    'entry_bg': '#313244', 'entry_fg': '#CDD6F4',
-    'border': '#45475A', 'verse_num': '#89B4FA',
-    'status_bg': '#313244', 'status_fg': '#A6E3A1',
-    'status_off_bg': '#313244', 'status_off_fg': '#F38BA8',
-    'separator': '#45475A',
-    'listbox_bg': '#313244', 'listbox_fg': '#CDD6F4',
-    'listbox_sel_bg': '#45475A', 'listbox_sel_fg': '#CDD6F4',
-    'preview_bg': '#11111B', 'preview_fg': '#CDD6F4',
-    'radio_bg': '#1E1E2E', 'radio_fg': '#CDD6F4', 'radio_sel': '#313244',
+    'bg': '#16131F', 'fg': '#E8E5F2',
+    'viewer_bg': '#1C1828', 'viewer_fg': '#E6E3F0',
+    'highlight_bg': '#F4D58D', 'highlight_fg': '#1A1330',
+    'select_bg': '#4C3AA8', 'select_fg': '#FFFFFF',
+    'scroll_thumb': '#4A4366', 'scroll_trough': '#141019', 'scroll_active': '#6B6294',
+    'lex_hl_bg': '#39325A',
+    'accent': '#9A86FF', 'accent_hover': '#B3A4FF',
+    'button_bg': '#251F38', 'button_fg': '#C9C0EC', 'button_active': '#322A4E',
+    'frame_bg': '#1A1626',
+    'entry_bg': '#221C34', 'entry_fg': '#E6E3F0',
+    'border': '#2C2542', 'verse_num': '#9A86FF',
+    'status_bg': '#1C2A20', 'status_fg': '#7EE0A1',
+    'status_off_bg': '#2E1F28', 'status_off_fg': '#F2899F',
+    'separator': '#2C2542',
+    'listbox_bg': '#221C34', 'listbox_fg': '#E6E3F0',
+    'listbox_sel_bg': '#39325A', 'listbox_sel_fg': '#FFFFFF',
+    'preview_bg': '#141019', 'preview_fg': '#E6E3F0',
+    'radio_bg': '#16131F', 'radio_fg': '#E8E5F2', 'radio_sel': '#221C34',
 }
 
 
@@ -1549,8 +1558,8 @@ class BibleClipApp:
         hpw.add(tf, minsize=300, stretch="always")
         self.viewer_text_frame = tf
         self.viewer_text = tk.Text(tf, font=(BODY_FONT, 11), wrap=tk.WORD,
-                                     state=tk.DISABLED, spacing1=2, spacing3=2,
-                                     padx=12, pady=8)
+                                     state=tk.DISABLED, spacing1=3, spacing3=4,
+                                     padx=18, pady=14)
         self.viewer_scroll = tk.Scrollbar(tf, command=self.viewer_text.yview)
         self.viewer_text.configure(yscrollcommand=self._on_viewer_yscroll)
         self.viewer_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1565,8 +1574,8 @@ class BibleClipApp:
         mf = tk.Frame(mid)
         mf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         self.lex_mid_text = tk.Text(mf, font=(BODY_FONT, 10), wrap=tk.WORD,
-                                      state=tk.DISABLED, spacing1=2, spacing3=2,
-                                      padx=8, pady=6)
+                                      state=tk.DISABLED, spacing1=3, spacing3=3,
+                                      padx=12, pady=10)
         self.lex_mid_scroll = tk.Scrollbar(mf, command=self.lex_mid_text.yview)
         self.lex_mid_text.configure(yscrollcommand=self.lex_mid_scroll.set)
         self.lex_mid_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -1595,8 +1604,8 @@ class BibleClipApp:
         rgf = tk.Frame(rg)
         rgf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         self.lex_right_text = tk.Text(rgf, font=(BODY_FONT, 10), wrap=tk.WORD,
-                                        state=tk.DISABLED, spacing1=2, spacing3=2,
-                                        padx=8, pady=6)
+                                        state=tk.DISABLED, spacing1=3, spacing3=3,
+                                        padx=12, pady=10)
         self.lex_right_scroll = tk.Scrollbar(rgf, command=self.lex_right_text.yview)
         self.lex_right_text.configure(yscrollcommand=self.lex_right_scroll.set)
         self.lex_right_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -2086,7 +2095,7 @@ class BibleClipApp:
             body = f"{morph}<b>[{code}]</b><br><br>사전 항목 없음"
         else:
             body = f"{morph}<b>[{code}]</b><br><br>{entry}"
-        render_dict_html(self.lex_right_text, body, fg=fg)
+        render_dict_html(self.lex_right_text, body, fg=fg, num_color=self.theme['accent'])
 
     # ---- Independent dictionary windows (Ctrl+click) ----
 
@@ -2126,7 +2135,7 @@ class BibleClipApp:
         entry = lex.lookup(code) if lex else None
         body = (f"{morph}<b>[{code}]</b><br><br>"
                 + (entry if entry is not None else "사전 항목 없음"))
-        render_dict_html(txt, body, fg=t['viewer_fg'])
+        render_dict_html(txt, body, fg=t['viewer_fg'], num_color=t['accent'])
 
         self._lex_popups.append(top)
 
@@ -2748,10 +2757,11 @@ class BibleClipApp:
     def _apply_viewer_font(self):
         size = int(self.settings.get('viewer_font_size', 11))
         num_size = max(8, size - 2)
-        self.viewer_text.configure(font=(BODY_FONT, size))
-        self.viewer_text.tag_configure('verse_num', font=(BODY_FONT, num_size, 'bold'))
-        self.viewer_text.tag_configure('highlight', font=(BODY_FONT, size, 'bold'))
-        self.viewer_text.tag_configure('highlight_num', font=(BODY_FONT, num_size, 'bold'))
+        # Scripture body in serif; verse-number labels stay sans for clarity.
+        self.viewer_text.configure(font=(SERIF_FONT, size + 1))
+        self.viewer_text.tag_configure('verse_num', font=(UI_FONT, num_size, 'bold'))
+        self.viewer_text.tag_configure('highlight', font=(SERIF_FONT, size + 1, 'bold'))
+        self.viewer_text.tag_configure('highlight_num', font=(UI_FONT, num_size, 'bold'))
         # Apply the same size to the original-language and dictionary panels.
         if hasattr(self, 'lex_mid_text'):
             self.lex_mid_text.configure(font=(BODY_FONT, size))
