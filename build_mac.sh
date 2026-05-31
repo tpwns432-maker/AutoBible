@@ -1,8 +1,8 @@
 #!/bin/bash
 # =====================================================================
-# AutoBible - macOS build script
-#   Run this ON a Mac. Produces dist/AutoBible-mac/ containing
-#   AutoBible.app plus the data folders next to it.
+# BibleClip - macOS build script
+#   Run this ON a Mac. Produces dist/BibleClip-mac/ containing
+#   BibleClip.app plus the data folders next to it.
 #
 #   Usage:
 #       chmod +x build_mac.sh
@@ -37,24 +37,24 @@ else
   echo "==> No icon.icns - building without a custom icon"
 fi
 
-echo "==> Building AutoBible.app with PyInstaller"
+echo "==> Building BibleClip.app with PyInstaller"
 "$PYTHON" -m PyInstaller --onedir --windowed --noconfirm --clean \
-  --name AutoBible $ICON_ARG autobible.py
+  --name BibleClip $ICON_ARG autobible.py
 
-# Locate the produced .app (PyInstaller may place it at dist/AutoBible.app)
+# Locate the produced .app (PyInstaller may place it at dist/BibleClip.app)
 APP=""
-if [ -d "dist/AutoBible.app" ]; then
-  APP="dist/AutoBible.app"
-elif [ -d "dist/AutoBible/AutoBible.app" ]; then
-  APP="dist/AutoBible/AutoBible.app"
+if [ -d "dist/BibleClip.app" ]; then
+  APP="dist/BibleClip.app"
+elif [ -d "dist/BibleClip/BibleClip.app" ]; then
+  APP="dist/BibleClip/BibleClip.app"
 fi
 
 if [ -z "$APP" ]; then
-  echo "ERROR: AutoBible.app was not found under dist/. Check PyInstaller output."
+  echo "ERROR: BibleClip.app was not found under dist/. Check PyInstaller output."
   exit 1
 fi
 
-echo "==> Bundling data inside AutoBible.app (survives moving / translocation)"
+echo "==> Bundling data inside BibleClip.app (survives moving / translocation)"
 MACOS="$APP/Contents/MacOS"
 if [ -d "bible_versions" ]; then
   mkdir -p "$MACOS/bible_versions"
@@ -77,21 +77,21 @@ fi
 
 # Copying into the bundle invalidated the signature; re-sign ad-hoc so macOS
 # doesn't report the app as "damaged".
-echo "==> Re-signing (ad-hoc) AutoBible.app"
+echo "==> Re-signing (ad-hoc) BibleClip.app"
 codesign --force --deep --sign - "$APP" || echo "  (codesign failed; continuing)"
 
-echo "==> Assembling distribution folder dist/AutoBible-mac/"
-OUT="dist/AutoBible-mac"
+echo "==> Assembling distribution folder dist/BibleClip-mac/"
+OUT="dist/BibleClip-mac"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 # ditto (not cp -R) preserves the code signature; cp -R breaks it -> "damaged"
-ditto "$APP" "$OUT/AutoBible.app"
+ditto "$APP" "$OUT/BibleClip.app"
 
 echo ""
 echo "==> Done."
 echo "    App + data are in: $OUT"
-echo "    Run it by double-clicking: $OUT/AutoBible.app"
+echo "    Run it by double-clicking: $OUT/BibleClip.app"
 echo ""
 echo "    NOTE: On first launch macOS Gatekeeper may block an unsigned app."
-echo "    Right-click AutoBible.app -> Open -> Open, or run:"
-echo "        xattr -dr com.apple.quarantine \"$OUT/AutoBible.app\""
+echo "    Right-click BibleClip.app -> Open -> Open, or run:"
+echo "        xattr -dr com.apple.quarantine \"$OUT/BibleClip.app\""

@@ -1,5 +1,5 @@
 """
-AutoBible - Bible Verse Clipboard Monitor & Viewer
+BibleClip - Bible Verse Clipboard Monitor & Viewer
 """
 
 import tkinter as tk
@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.2.7"
+__version__ = "1.3.0"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -51,14 +51,14 @@ RELEASES_PAGE_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/l
 def get_base_dir():
     """Get the base directory - works for both script and PyInstaller bundle.
 
-    On Windows the data folders sit next to AutoBible.exe. On a macOS .app
-    bundle, sys.executable lives in AutoBible.app/Contents/MacOS/, so walk up
-    out of the bundle to look for the data folders next to AutoBible.app.
+    On Windows the data folders sit next to BibleClip.exe. On a macOS .app
+    bundle, sys.executable lives in BibleClip.app/Contents/MacOS/, so walk up
+    out of the bundle to look for the data folders next to BibleClip.app.
     """
     if getattr(sys, 'frozen', False):
         exe_dir = os.path.dirname(sys.executable)
         if sys.platform == 'darwin' and exe_dir.endswith(os.path.join('Contents', 'MacOS')):
-            # exe_dir = /path/AutoBible.app/Contents/MacOS -> /path
+            # exe_dir = /path/BibleClip.app/Contents/MacOS -> /path
             return os.path.dirname(os.path.dirname(os.path.dirname(exe_dir)))
         return exe_dir
     return os.path.dirname(os.path.abspath(__file__))
@@ -410,7 +410,7 @@ def urlopen_resilient(req, timeout):
 
 def _fetch_release_raw(timeout=8, ssl_context=None):
     req = urllib.request.Request(UPDATE_CHECK_URL, headers={
-        'User-Agent': f'AutoBible/{__version__}',
+        'User-Agent': f'BibleClip/{__version__}',
         'Accept': 'application/vnd.github+json',
     })
     if ssl_context is not None:
@@ -464,8 +464,8 @@ def fetch_latest_release(timeout=8):
 def select_platform_asset(assets):
     """Pick the release .zip matching the current OS.
 
-    Releases may carry several platform zips (e.g. AutoBible-windows-*.zip,
-    AutoBible-macos-*.zip). Choose by OS keyword; fall back to a zip that does
+    Releases may carry several platform zips (e.g. BibleClip-windows-*.zip,
+    BibleClip-macos-*.zip). Choose by OS keyword; fall back to a zip that does
     not belong to another platform (handles legacy single-zip releases).
     Returns (download_url, asset_name) or ('', '').
     """
@@ -485,7 +485,7 @@ def select_platform_asset(assets):
         low = name.lower()
         if any(w in low for w in want):
             return url, name
-    # 2) a zip not tagged for another OS (e.g. legacy single AutoBible-vX.zip)
+    # 2) a zip not tagged for another OS (e.g. legacy single BibleClip-vX.zip)
     for name, url in zips:
         low = name.lower()
         if not any(a in low for a in avoid):
@@ -1075,7 +1075,7 @@ class Formatter:
 # Main Application
 # ---------------------------------------------------------------------------
 
-class AutoBibleApp:
+class BibleClipApp:
     DEFAULT_SETTINGS = {
         'book_name': 'short_ko',        # short_ko, long_ko, short_en, long_en
         'chapter_verse_format': 'colon', # colon, korean
@@ -1104,7 +1104,7 @@ class AutoBibleApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title(f"AutoBible v{__version__}")
+        self.root.title(f"BibleClip v{__version__}")
         self.root.minsize(900, 650)
 
         icon_path = os.path.join(BASE_DIR, "icon.ico")
@@ -1323,7 +1323,7 @@ class AutoBibleApp:
         self.top_bar = tk.Frame(self.main_frame, height=48)
         self.top_bar.pack(fill=tk.X, padx=8, pady=6)
 
-        self.title_label = tk.Label(self.top_bar, text="AutoBible",
+        self.title_label = tk.Label(self.top_bar, text="BibleClip",
                                       font=(UI_FONT, 16, 'bold'))
         self.title_label.pack(side=tk.LEFT, padx=(4, 20))
 
@@ -3332,10 +3332,10 @@ class AutoBibleApp:
                     zf.extractall(extract_dir)
 
                 # Resolve src dir = the folder that actually holds the payload.
-                # The macOS zip's single top-level entry IS AutoBible.app, so a
+                # The macOS zip's single top-level entry IS BibleClip.app, so a
                 # naive "descend into the only folder" heuristic wrongly steps
                 # INTO the bundle. Locate by payload instead.
-                payload = 'AutoBible.app' if is_mac else 'AutoBible.exe'
+                payload = 'BibleClip.app' if is_mac else 'BibleClip.exe'
 
                 def _has_payload(d):
                     return os.path.exists(os.path.join(d, payload))
@@ -3354,9 +3354,9 @@ class AutoBibleApp:
                 if is_mac:
                     sh_path = os.path.join(tmpdir, 'updater.sh')
                     # Replace the ACTUAL running bundle (its name may differ,
-                    # e.g. "AutoBible 2.app" on a name collision), not a
-                    # hardcoded AutoBible.app.
-                    app_dst = self._running_app_path() or os.path.join(BASE_DIR, 'AutoBible.app')
+                    # e.g. "BibleClip 2.app" on a name collision), not a
+                    # hardcoded BibleClip.app.
+                    app_dst = self._running_app_path() or os.path.join(BASE_DIR, 'BibleClip.app')
                     self._write_mac_updater_sh(sh_path, src_dir, app_dst, os.getpid())
                     subprocess.Popen(['/bin/bash', sh_path],
                                      start_new_session=True, close_fds=True)
@@ -3379,7 +3379,7 @@ class AutoBibleApp:
 
     def _running_app_path(self):
         """Path of the currently running .app bundle (handles a renamed bundle
-        like 'AutoBible 2.app'), or None when not in a .app."""
+        like 'BibleClip 2.app'), or None when not in a .app."""
         if sys.platform != 'darwin':
             return None
         p = os.path.dirname(sys.executable)
@@ -3394,7 +3394,7 @@ class AutoBibleApp:
         """Bash updater: wait for the app to quit, swap the .app + data, relaunch.
 
         app_dst is the FULL path of the bundle to replace (the running app,
-        whatever its name). The new bundle is always extracted as AutoBible.app.
+        whatever its name). The new bundle is always extracted as BibleClip.app.
         """
         dst_parent = os.path.dirname(app_dst.rstrip('/'))
         lines = [
@@ -3408,7 +3408,7 @@ class AutoBibleApp:
             f'for i in $(seq 1 30); do kill -0 {int(pid)} 2>/dev/null || break; sleep 1; done',
             'sleep 1',
             'rm -rf "$APP"',
-            'ditto "$SRC/AutoBible.app" "$APP" >> "$LOG" 2>&1',
+            'ditto "$SRC/BibleClip.app" "$APP" >> "$LOG" 2>&1',
             'RC=$?',
             '[ -d "$SRC/bible_versions" ] && ditto "$SRC/bible_versions" "$DST/bible_versions" >> "$LOG" 2>&1',
             '[ -d "$SRC/original_lang" ] && ditto "$SRC/original_lang" "$DST/original_lang" >> "$LOG" 2>&1',
@@ -3437,7 +3437,7 @@ class AutoBibleApp:
 
     def _download_with_progress(self, url, dest, pb, status, lbl):
         req = urllib.request.Request(url, headers={
-            'User-Agent': f'AutoBible/{__version__}',
+            'User-Agent': f'BibleClip/{__version__}',
             'Accept': 'application/octet-stream',
         })
         with urlopen_resilient(req, 30) as resp:
@@ -3464,7 +3464,7 @@ class AutoBibleApp:
         # Robust updater:
         #  - wait for the app to fully exit (tasklist loop)
         #  - settle delay so OneDrive / AV / the just-exited process release
-        #    file locks on AutoBible.exe and the _internal DLLs
+        #    file locks on BibleClip.exe and the _internal DLLs
         #  - robocopy (retries locked files; clear exit codes) instead of xcopy
         #    (xcopy can silently report success after copying 0 files)
         #  - robocopy success is exit code < 8; relaunch and log the outcome
@@ -3482,7 +3482,7 @@ class AutoBibleApp:
             "echo [updater] start %DATE% %TIME% > \"%LOG%\"\r\n"
             "set TRIES=0\r\n"
             ":wait\r\n"
-            "tasklist /FI \"IMAGENAME eq AutoBible.exe\" 2>nul | find /I \"AutoBible.exe\" >nul\r\n"
+            "tasklist /FI \"IMAGENAME eq BibleClip.exe\" 2>nul | find /I \"BibleClip.exe\" >nul\r\n"
             "if errorlevel 1 goto ready\r\n"
             "set /a TRIES+=1\r\n"
             "if %TRIES% GEQ 30 goto ready\r\n"
@@ -3495,11 +3495,11 @@ class AutoBibleApp:
             "echo [updater] robocopy exit %RC% >> \"%LOG%\"\r\n"
             "if %RC% GEQ 8 (\r\n"
             "  echo [updater] FAILED >> \"%LOG%\"\r\n"
-            "  start \"\" \"%DST%\\AutoBible.exe\"\r\n"
+            "  start \"\" \"%DST%\\BibleClip.exe\"\r\n"
             "  exit /b 1\r\n"
             ")\r\n"
             "echo [updater] OK >> \"%LOG%\"\r\n"
-            "start \"\" \"%DST%\\AutoBible.exe\"\r\n"
+            "start \"\" \"%DST%\\BibleClip.exe\"\r\n"
             "(goto) 2>nul & del \"%~f0\"\r\n"
             "exit /b 0\r\n"
         )
@@ -3557,7 +3557,7 @@ class AutoBibleApp:
 
 def main():
     root = tk.Tk()
-    AutoBibleApp(root)
+    BibleClipApp(root)
     root.mainloop()
 
 

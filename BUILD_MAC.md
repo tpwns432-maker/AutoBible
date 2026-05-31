@@ -1,6 +1,6 @@
-# AutoBible — macOS 빌드 안내
+# BibleClip — macOS 빌드 안내
 
-Windows에서 만든 AutoBible을 Mac에서 빌드해 실행하는 방법입니다.
+Windows에서 만든 BibleClip을 Mac에서 빌드해 실행하는 방법입니다.
 (PyInstaller는 크로스 컴파일이 안 되므로 **반드시 Mac에서** 빌드해야 합니다.)
 
 ## 1. 폴더 구성 확인
@@ -38,16 +38,16 @@ chmod +x build_mac.sh
 
 스크립트가 자동으로:
 1. PyInstaller 설치
-2. `AutoBible.app` 빌드
-3. `dist/AutoBible-mac/` 폴더에 앱 + 데이터 폴더를 함께 배치
+2. `BibleClip.app` 빌드
+3. `dist/BibleClip-mac/` 폴더에 앱 + 데이터 폴더를 함께 배치
 
 ## 4. 실행
 
 ```
-dist/AutoBible-mac/AutoBible.app   ← 더블클릭
+dist/BibleClip-mac/BibleClip.app   ← 더블클릭
 ```
 
-성경/원어 데이터는 `AutoBible.app` **번들 안에** 들어있어, 앱을 어디로 옮기든
+성경/원어 데이터는 `BibleClip.app` **번들 안에** 들어있어, 앱을 어디로 옮기든
 함께 따라갑니다. (추가 성경을 넣고 싶으면 `.app`과 같은 폴더에 `bible_versions`
 폴더를 두면 인식됩니다.)
 
@@ -55,10 +55,10 @@ dist/AutoBible-mac/AutoBible.app   ← 더블클릭
 
 서명되지 않은 앱이라 macOS가 "확인되지 않은 개발자" 경고를 띄울 수 있습니다.
 
-- `AutoBible.app` 우클릭 → **열기** → **열기**, 또는
+- `BibleClip.app` 우클릭 → **열기** → **열기**, 또는
 - 터미널에서:
   ```bash
-  xattr -cr /Applications/AutoBible.app    # 경로는 실제 위치에 맞게
+  xattr -cr /Applications/BibleClip.app    # 경로는 실제 위치에 맞게
   ```
   ("손상되어 열 수 없음(damaged)" 경고가 나올 때도 위 명령으로 해결됩니다.)
 

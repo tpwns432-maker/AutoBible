@@ -4,7 +4,10 @@ AutoBible의 버전별 변경 내용입니다. 최신 버전이 위에 옵니다
 
 ---
 
-## v1.2.7
+## v1.3.0
+- 앱 이름을 **AutoBible → BibleClip** 으로 변경 (창 제목·실행 파일·릴리스 파일명)
+  - 기존 사용자는 이번 버전을 한 번 수동 설치하면 이후 자동 업데이트가 정상 동작
+  - macOS의 기존 앱 이름 충돌("AutoBible 2.app") 문제도 함께 해소
 - macOS 한글 클립보드 인식 오류 수정 (핵심)
   - Finder에서 실행한 .app은 LANG 환경변수가 없어 `pbpaste`가 한글을 `?`로 깨뜨리던 문제 → `LANG`/`LC_ALL`을 UTF-8로 강제
   - `pbpaste`/`pbcopy`를 절대경로로 호출 + 번들의 DYLD_* 환경변수 정리
