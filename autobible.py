@@ -18,12 +18,16 @@ import zipfile
 import tempfile
 import subprocess
 import datetime
+import webbrowser
 
 __version__ = "1.1.6"
+
+IS_WINDOWS = sys.platform.startswith('win')
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
 UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+RELEASES_PAGE_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -2721,6 +2725,20 @@ class AutoBibleApp:
     def _start_update(self):
         info = self.update_info
         if not info:
+            return
+        if not IS_WINDOWS:
+            # The in-place updater (cmd/batch/robocopy) is Windows-only.
+            # On macOS/Linux, point the user at the download page instead.
+            ver = info.get('version', '')
+            if messagebox.askyesno(
+                    "업데이트",
+                    f"새 버전 {ver}이(가) 있습니다.\n"
+                    f"현재 OS에서는 자동 설치가 지원되지 않습니다.\n\n"
+                    f"다운로드 페이지를 여시겠습니까?"):
+                try:
+                    webbrowser.open(RELEASES_PAGE_URL)
+                except Exception:
+                    pass
             return
         if not getattr(sys, 'frozen', False):
             messagebox.showinfo("업데이트", "소스 실행 모드에서는 자동 업데이트가 적용되지 않습니다.")
