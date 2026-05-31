@@ -78,21 +78,35 @@ jobs:
       - name: Assemble package
         run: |
           V=$(python -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('autobible.py').read()).group(1))")
+          if [ -d dist/AutoBible.app ]; then
+            APP="dist/AutoBible.app"
+          else
+            APP="dist/AutoBible/AutoBible.app"
+          fi
+          # Bundle data INSIDE the .app so it survives App Translocation and the
+          # app being moved (data sits next to the executable in Contents/MacOS).
+          MACOS="$APP/Contents/MacOS"
+          mkdir -p "$MACOS/bible_versions" && cp bible_versions/KRV.SQLite3 "$MACOS/bible_versions/"
+          mkdir -p "$MACOS/original_lang" && cp original_lang/* "$MACOS/original_lang/"
           OUT="AutoBible-mac"
           rm -rf "$OUT" && mkdir -p "$OUT"
-          if [ -d dist/AutoBible.app ]; then
-            cp -R dist/AutoBible.app "$OUT/"
-          else
-            cp -R dist/AutoBible/AutoBible.app "$OUT/"
-          fi
-          mkdir -p "$OUT/bible_versions" && cp bible_versions/KRV.SQLite3 "$OUT/bible_versions/"
-          mkdir -p "$OUT/original_lang" && cp original_lang/* "$OUT/original_lang/"
+          cp -R "$APP" "$OUT/"
+          # zip — used by the in-app auto-updater
           ( cd "$OUT" && zip -r -y "../AutoBible-macos-v$V.zip" . )
+          # dmg — friendly drag-to-Applications installer
+          STAGE="dmg_stage"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          cp -R "$APP" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "AutoBible" -srcfolder "$STAGE" -ov \
+            -format UDZO "AutoBible-macos-v$V.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: AutoBible-macos-*.zip
+          path: |
+            AutoBible-macos-*.zip
+            AutoBible-macos-*.dmg
 
   # -------------------------------------------------------------------
   release:
@@ -108,3 +122,4 @@ jobs:
           files: |
             windows/*.zip
             macos/*.zip
+            macos/*.dmg

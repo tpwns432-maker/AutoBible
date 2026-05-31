@@ -47,8 +47,9 @@ chmod +x build_mac.sh
 dist/AutoBible-mac/AutoBible.app   ← 더블클릭
 ```
 
-`AutoBible.app` 옆의 `bible_versions/`, `original_lang/` 폴더는 **항상 앱과
-같은 폴더에** 있어야 합니다. (앱을 옮길 때 두 폴더도 함께 옮기세요.)
+성경/원어 데이터는 `AutoBible.app` **번들 안에** 들어있어, 앱을 어디로 옮기든
+함께 따라갑니다. (추가 성경을 넣고 싶으면 `.app`과 같은 폴더에 `bible_versions`
+폴더를 두면 인식됩니다.)
 
 ### 처음 실행 시 Gatekeeper 경고
 

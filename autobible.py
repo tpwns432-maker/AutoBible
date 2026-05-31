@@ -21,7 +21,7 @@ import datetime
 import webbrowser
 import shlex
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -68,6 +68,37 @@ def get_resource_dir():
 BASE_DIR = get_base_dir()
 SETTINGS_FILE = "autobible_settings.json"
 BIBLE_DIR = "bible_versions"
+
+
+def candidate_data_roots():
+    """Folders to search for data (bible_versions, original_lang), in order.
+
+    BASE_DIR first (next to the exe / .app — lets users drop in extra data).
+    On a frozen build also the executable's own dir: inside a macOS .app this
+    is Contents/MacOS, where bundled data lives so it survives App
+    Translocation and the app being moved.
+    """
+    roots = [BASE_DIR]
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        if exe_dir not in roots:
+            roots.append(exe_dir)
+        try:
+            mei = sys._MEIPASS
+            if mei not in roots:
+                roots.append(mei)
+        except Exception:
+            pass
+    return roots
+
+
+def resolve_data_dir(name):
+    """First existing candidate root containing `name`, else BASE_DIR/name."""
+    for root in candidate_data_roots():
+        p = os.path.join(root, name)
+        if os.path.isdir(p):
+            return p
+    return os.path.join(BASE_DIR, name)
 
 # Qwerty -> 한글 자모 변환 매핑 (두벌식)
 QWERTY_TO_HANGUL = {
@@ -413,17 +444,19 @@ ORIGINAL_LANG_DIR = "original_lang"
 LEGACY_ORIGINAL_LANG_DIRS = ["BethlehemWin"]
 
 
-def resolve_original_lang_dir(base_dir):
-    """Return the data dir to use: original_lang, else a legacy name, else
-    the original_lang path (even if absent) so messages reference the new name."""
-    primary = os.path.join(base_dir, ORIGINAL_LANG_DIR)
-    if os.path.isdir(primary):
-        return primary
-    for legacy in LEGACY_ORIGINAL_LANG_DIRS:
-        p = os.path.join(base_dir, legacy)
-        if os.path.isdir(p):
-            return p
-    return primary
+def resolve_original_lang_dir(base_dir=None):
+    """Find the original-language data dir across candidate roots.
+
+    Checks 'original_lang' then legacy names, in each candidate root (next to
+    the app, then inside a macOS .app bundle). Falls back to BASE_DIR/original_lang.
+    """
+    names = [ORIGINAL_LANG_DIR] + LEGACY_ORIGINAL_LANG_DIRS
+    for root in candidate_data_roots():
+        for name in names:
+            p = os.path.join(root, name)
+            if os.path.isdir(p):
+                return p
+    return os.path.join(BASE_DIR, ORIGINAL_LANG_DIR)
 
 # Bethlehem dbs use 1..66 Protestant numbering. Map to/from our 10..730 scheme
 # (deuterocanonical slots 170,180,200,210,270,280,320 are skipped).
@@ -1068,7 +1101,7 @@ class AutoBibleApp:
     # ---- Database ----
 
     def _load_databases(self):
-        db_dir = os.path.join(BASE_DIR, BIBLE_DIR)
+        db_dir = resolve_data_dir(BIBLE_DIR)
         if not os.path.isdir(db_dir):
             os.makedirs(db_dir, exist_ok=True)
             return
@@ -1116,7 +1149,7 @@ class AutoBibleApp:
 
     def _refresh_databases(self):
         """Rescan bible_versions folder for new DB files."""
-        db_dir = os.path.join(BASE_DIR, BIBLE_DIR)
+        db_dir = resolve_data_dir(BIBLE_DIR)
         if not os.path.isdir(db_dir):
             return
         existing = set(self.bible_dbs.keys())

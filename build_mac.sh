@@ -54,15 +54,22 @@ if [ -z "$APP" ]; then
   exit 1
 fi
 
+echo "==> Bundling data inside AutoBible.app (survives moving / translocation)"
+MACOS="$APP/Contents/MacOS"
+if [ -d "bible_versions" ]; then
+  mkdir -p "$MACOS/bible_versions"
+  cp bible_versions/*.SQLite3 "$MACOS/bible_versions/" 2>/dev/null || true
+fi
+if [ -d "original_lang" ]; then
+  mkdir -p "$MACOS/original_lang"
+  cp original_lang/* "$MACOS/original_lang/" 2>/dev/null || true
+fi
+
 echo "==> Assembling distribution folder dist/AutoBible-mac/"
 OUT="dist/AutoBible-mac"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R "$APP" "$OUT/"
-
-# Data folders must sit NEXT TO AutoBible.app (the app looks for them there).
-[ -d "bible_versions" ] && cp -R bible_versions "$OUT/" || echo "  (warning: bible_versions/ not found)"
-[ -d "original_lang" ]  && cp -R original_lang  "$OUT/" || echo "  (warning: original_lang/ not found)"
 
 echo ""
 echo "==> Done."
