@@ -19,7 +19,7 @@ import tempfile
 import subprocess
 import datetime
 
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
@@ -2754,20 +2754,35 @@ class AutoBibleApp:
                 self._write_updater_bat(bat_path, src_dir, BASE_DIR)
 
                 self.root.after(0, lambda: status.configure(text="앱 종료 후 교체합니다..."))
-                # Spawn detached updater
-                subprocess.Popen(
-                    ['cmd', '/c', bat_path],
-                    creationflags=(subprocess.DETACHED_PROCESS
-                                   | subprocess.CREATE_NEW_PROCESS_GROUP
-                                   | subprocess.CREATE_NO_WINDOW),
-                    close_fds=True,
-                )
-                self.root.after(400, self._on_close)
+                # Spawn the updater in a hidden console (CREATE_NO_WINDOW keeps a
+                # console so timeout/ping/tasklist work, but shows no window).
+                # Do NOT combine with DETACHED_PROCESS — that conflict produced a
+                # visible, mis-behaving console window.
+                flags = subprocess.CREATE_NEW_PROCESS_GROUP
+                flags |= getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                subprocess.Popen(['cmd', '/c', bat_path], creationflags=flags,
+                                 close_fds=True)
+                # Force-quit so the updater's wait loop sees the process gone.
+                self.root.after(300, self._quit_for_update)
             except Exception as e:
                 err = str(e)
                 self.root.after(0, lambda: self._update_failed(err, win))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _quit_for_update(self):
+        """Hard-exit used right before the external updater swaps files."""
+        try:
+            self.monitoring = False
+            self._save_settings()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        # Guarantee the process terminates so the updater can overwrite the exe.
+        os._exit(0)
 
     def _download_with_progress(self, url, dest, pb, status, lbl):
         req = urllib.request.Request(url, headers={
@@ -2795,28 +2810,65 @@ class AutoBibleApp:
                             text=f"{d // 1024:,} KB"))
 
     def _write_updater_bat(self, path, src_dir, install_dir):
-        # Use ASCII-only to avoid console codepage issues.
+        # Robust updater:
+        #  - wait for the app to fully exit (tasklist loop)
+        #  - settle delay so OneDrive / AV / the just-exited process release
+        #    file locks on AutoBible.exe and the _internal DLLs
+        #  - robocopy (retries locked files; clear exit codes) instead of xcopy
+        #    (xcopy can silently report success after copying 0 files)
+        #  - robocopy success is exit code < 8; relaunch and log the outcome
+        #
+        # Paths may contain non-ASCII characters (Korean folder names). cmd.exe
+        # reads a .bat using the console OEM codepage, so the file is written in
+        # that codepage (cp949 on Korean Windows), not ASCII. The long install
+        # path is bound to a variable so it appears only once.
         content = (
             "@echo off\r\n"
             "setlocal\r\n"
-            "echo Applying AutoBible update...\r\n"
+            f"set \"SRC={src_dir}\"\r\n"
+            f"set \"DST={install_dir}\"\r\n"
+            "set \"LOG=%DST%\\update_apply.log\"\r\n"
+            "echo [updater] start %DATE% %TIME% > \"%LOG%\"\r\n"
+            "set TRIES=0\r\n"
             ":wait\r\n"
             "tasklist /FI \"IMAGENAME eq AutoBible.exe\" 2>nul | find /I \"AutoBible.exe\" >nul\r\n"
-            "if not errorlevel 1 (\r\n"
-            "  timeout /t 1 /nobreak >nul\r\n"
-            "  goto wait\r\n"
-            ")\r\n"
-            f"xcopy /E /Y /I \"{src_dir}\\*\" \"{install_dir}\\\" >nul\r\n"
-            "if errorlevel 1 (\r\n"
-            "  echo Update failed.\r\n"
-            "  pause\r\n"
+            "if errorlevel 1 goto ready\r\n"
+            "set /a TRIES+=1\r\n"
+            "if %TRIES% GEQ 30 goto ready\r\n"
+            "ping -n 2 127.0.0.1 >nul\r\n"
+            "goto wait\r\n"
+            ":ready\r\n"
+            "ping -n 3 127.0.0.1 >nul\r\n"
+            "robocopy \"%SRC%\" \"%DST%\" /E /R:8 /W:1 >> \"%LOG%\" 2>&1\r\n"
+            "set RC=%ERRORLEVEL%\r\n"
+            "echo [updater] robocopy exit %RC% >> \"%LOG%\"\r\n"
+            "if %RC% GEQ 8 (\r\n"
+            "  echo [updater] FAILED >> \"%LOG%\"\r\n"
+            "  start \"\" \"%DST%\\AutoBible.exe\"\r\n"
             "  exit /b 1\r\n"
             ")\r\n"
-            f"start \"\" \"{install_dir}\\AutoBible.exe\"\r\n"
+            "echo [updater] OK >> \"%LOG%\"\r\n"
+            "start \"\" \"%DST%\\AutoBible.exe\"\r\n"
             "(goto) 2>nul & del \"%~f0\"\r\n"
             "exit /b 0\r\n"
         )
-        with open(path, 'w', encoding='ascii') as f:
+        enc = 'utf-8'
+        try:
+            import ctypes
+            oemcp = ctypes.windll.kernel32.GetOEMCP()
+            candidate = f'cp{oemcp}'
+            content.encode(candidate)  # validate all chars are representable
+            enc = candidate
+        except Exception:
+            # Fall back to the locale's preferred encoding, then utf-8.
+            try:
+                import locale
+                candidate = locale.getpreferredencoding(False)
+                content.encode(candidate)
+                enc = candidate
+            except Exception:
+                enc = 'utf-8'
+        with open(path, 'w', encoding=enc, errors='replace') as f:
             f.write(content)
 
     def _update_failed(self, err, win):
