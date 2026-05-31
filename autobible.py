@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -3307,26 +3307,33 @@ class AutoBibleApp:
                 with zipfile.ZipFile(zip_path) as zf:
                     zf.extractall(extract_dir)
 
-                # Resolve src dir: zip may have a single top-level folder or be flat.
-                entries = os.listdir(extract_dir)
-                if len(entries) == 1 and os.path.isdir(os.path.join(extract_dir, entries[0])):
-                    src_dir = os.path.join(extract_dir, entries[0])
-                else:
-                    src_dir = extract_dir
+                # Resolve src dir = the folder that actually holds the payload.
+                # The macOS zip's single top-level entry IS AutoBible.app, so a
+                # naive "descend into the only folder" heuristic wrongly steps
+                # INTO the bundle. Locate by payload instead.
+                payload = 'AutoBible.app' if is_mac else 'AutoBible.exe'
+
+                def _has_payload(d):
+                    return os.path.exists(os.path.join(d, payload))
+
+                src_dir = extract_dir
+                if not _has_payload(src_dir):
+                    for e in os.listdir(extract_dir):
+                        cand = os.path.join(extract_dir, e)
+                        if os.path.isdir(cand) and _has_payload(cand):
+                            src_dir = cand
+                            break
+                if not _has_payload(src_dir):
+                    raise RuntimeError(f"zip 파일에 {payload}이(가) 없습니다.")
 
                 self.root.after(0, lambda: status.configure(text="앱 종료 후 교체합니다..."))
                 if is_mac:
-                    app_src = os.path.join(src_dir, 'AutoBible.app')
-                    if not os.path.isdir(app_src):
-                        raise RuntimeError("zip 파일에 AutoBible.app이 없습니다.")
                     sh_path = os.path.join(tmpdir, 'updater.sh')
                     self._write_mac_updater_sh(sh_path, src_dir, BASE_DIR, os.getpid())
                     subprocess.Popen(['/bin/bash', sh_path],
                                      start_new_session=True, close_fds=True)
                     self.root.after(300, self._quit_for_update)
                 else:
-                    if not os.path.exists(os.path.join(src_dir, 'AutoBible.exe')):
-                        raise RuntimeError("zip 파일에 AutoBible.exe가 없습니다.")
                     bat_path = os.path.join(tmpdir, 'updater.bat')
                     self._write_updater_bat(bat_path, src_dir, BASE_DIR)
                     # Hidden console (CREATE_NO_WINDOW); do NOT add DETACHED_PROCESS
