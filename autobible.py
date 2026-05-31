@@ -20,8 +20,12 @@ import subprocess
 import datetime
 import webbrowser
 import shlex
+try:
+    import certifi as _certifi  # bundled CA store (top-level so PyInstaller includes it)
+except Exception:
+    _certifi = None
 
-__version__ = "1.2.3"
+__version__ = "1.2.4"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -351,12 +355,47 @@ def parse_version(s):
     return tuple(nums) if nums else (0,)
 
 
+def _verified_ssl_context():
+    """A verifying SSL context, using certifi's CA bundle when available.
+
+    PyInstaller-bundled Python on macOS has no access to the system trust
+    store, so default verification fails with CERTIFICATE_VERIFY_FAILED.
+    certifi (bundled into the app) provides a CA file that works everywhere.
+    """
+    try:
+        if _certifi is not None:
+            return ssl.create_default_context(cafile=_certifi.where())
+    except Exception:
+        pass
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        return None
+
+
+def urlopen_resilient(req, timeout):
+    """urlopen that tries certifi/default verification, then falls back to an
+    unverified context on SSL failure (acceptable for fetching GitHub data)."""
+    try:
+        return urllib.request.urlopen(req, timeout=timeout,
+                                      context=_verified_ssl_context())
+    except (ssl.SSLError, urllib.error.URLError) as e:
+        reason = getattr(e, 'reason', e)
+        if isinstance(e, urllib.error.URLError) and not isinstance(reason, ssl.SSLError):
+            raise  # genuine network error, not a cert problem
+        return urllib.request.urlopen(req, timeout=timeout,
+                                      context=ssl._create_unverified_context())
+
+
 def _fetch_release_raw(timeout=8, ssl_context=None):
     req = urllib.request.Request(UPDATE_CHECK_URL, headers={
         'User-Agent': f'AutoBible/{__version__}',
         'Accept': 'application/vnd.github+json',
     })
-    with urllib.request.urlopen(req, timeout=timeout, context=ssl_context) as resp:
+    if ssl_context is not None:
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl_context) as resp:
+            return json.loads(resp.read().decode('utf-8'))
+    with urlopen_resilient(req, timeout) as resp:
         return json.loads(resp.read().decode('utf-8'))
 
 
@@ -3273,7 +3312,7 @@ class AutoBibleApp:
             'User-Agent': f'AutoBible/{__version__}',
             'Accept': 'application/octet-stream',
         })
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_resilient(req, 30) as resp:
             total = int(resp.headers.get('Content-Length') or 0)
             downloaded = 0
             with open(dest, 'wb') as f:
@@ -3360,7 +3399,15 @@ class AutoBibleApp:
             win.destroy()
         except Exception:
             pass
-        messagebox.showerror("업데이트 실패", f"업데이트 중 오류:\n{err}")
+        self._log_update(f'업데이트 실패: {err}')
+        if messagebox.askyesno(
+                "업데이트 실패",
+                f"자동 업데이트 중 오류가 발생했습니다:\n{err}\n\n"
+                f"다운로드 페이지에서 직접 받으시겠습니까?"):
+            try:
+                webbrowser.open(RELEASES_PAGE_URL)
+            except Exception:
+                pass
 
     # ---- Close ----
 

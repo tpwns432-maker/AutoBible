@@ -18,7 +18,7 @@ PYTHON="${PYTHON:-python3}"
 
 echo "==> Installing PyInstaller (in current Python environment)"
 "$PYTHON" -m pip install --upgrade pip >/dev/null
-"$PYTHON" -m pip install --upgrade pyinstaller
+"$PYTHON" -m pip install --upgrade pyinstaller certifi
 
 echo "==> Cleaning previous build output"
 rm -rf build dist *.spec
