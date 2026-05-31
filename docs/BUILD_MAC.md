@@ -8,8 +8,9 @@ Windows에서 만든 BibleClip을 Mac에서 빌드해 실행하는 방법입니�
 받은 폴더 안에 아래가 모두 있어야 합니다:
 
 ```
-autobible.py          ← 프로그램 소스
-build_mac.sh          ← Mac 빌드 스크립트
+bibleclip_app.py      ← 실행 진입점 (python -m bibleclip 도 가능)
+bibleclip/            ← 프로그램 소스 패키지 (config·data·core·ui)
+packaging/build_mac.sh ← Mac 빌드 스크립트
 bible_versions/       ← 성경 DB (최소 KRV.SQLite3)
 original_lang/        ← 원어/사전 데이터 (개역한글S.sdb, HebGrkKo.dct, HebGrkEn.dct)
 icon.icns             ← (선택) 앱 아이콘. 없으면 기본 아이콘으로 빌드됨
@@ -32,8 +33,8 @@ python3 --version
 
 ```bash
 cd /받은/폴더/경로
-chmod +x build_mac.sh
-./build_mac.sh
+chmod +x packaging/build_mac.sh
+./packaging/build_mac.sh
 ```
 
 스크립트가 자동으로:
