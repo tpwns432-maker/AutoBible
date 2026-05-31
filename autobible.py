@@ -19,7 +19,7 @@ import tempfile
 import subprocess
 import datetime
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
@@ -355,11 +355,26 @@ def fetch_latest_release(timeout=8):
 
 
 # ---------------------------------------------------------------------------
-# Bethlehem (Hebrew/Greek) data — Strong's-tagged original-language Bibles
-#   Lives in BethlehemWin/ folder if present; tab is disabled when missing.
+# Original-language (Hebrew/Greek) data — Strong's-tagged Bible + dictionaries
+#   Lives in an 'original_lang/' folder next to the app. The legacy name
+#   'BethlehemWin' is still recognized for existing installs.
 # ---------------------------------------------------------------------------
 
-BETHLEHEM_DIR = "BethlehemWin"
+ORIGINAL_LANG_DIR = "original_lang"
+LEGACY_ORIGINAL_LANG_DIRS = ["BethlehemWin"]
+
+
+def resolve_original_lang_dir(base_dir):
+    """Return the data dir to use: original_lang, else a legacy name, else
+    the original_lang path (even if absent) so messages reference the new name."""
+    primary = os.path.join(base_dir, ORIGINAL_LANG_DIR)
+    if os.path.isdir(primary):
+        return primary
+    for legacy in LEGACY_ORIGINAL_LANG_DIRS:
+        p = os.path.join(base_dir, legacy)
+        if os.path.isdir(p):
+            return p
+    return primary
 
 # Bethlehem dbs use 1..66 Protestant numbering. Map to/from our 10..730 scheme
 # (deuterocanonical slots 170,180,200,210,270,280,320 are skipped).
@@ -1005,12 +1020,12 @@ class AutoBibleApp:
                     print(f"Error loading {fname}: {e}")
 
     def _load_bethlehem(self):
-        """Load KRV-with-Strong's + lexicons from BethlehemWin folder if present."""
+        """Load KRV-with-Strong's + lexicons from the original_lang folder."""
         self.bethlehem_strongs = None  # 개역한글S — KRV-based, drives middle panel
         self.bethlehem_wonjun = None   # 원전분해 — kept for potential future use
         self.lexicon_ko = None
         self.lexicon_en = None
-        bdir = os.path.join(BASE_DIR, BETHLEHEM_DIR)
+        bdir = resolve_original_lang_dir(BASE_DIR)
         if not os.path.isdir(bdir):
             return
         strongs_path = os.path.join(bdir, '개역한글S.sdb')
@@ -1580,7 +1595,7 @@ class AutoBibleApp:
         text.delete('1.0', tk.END)
         if not self.bethlehem_strongs:
             text.insert(tk.END, "원어 사전 데이터가 없습니다.\n"
-                                "BethlehemWin 폴더에 개역한글S.sdb가 필요합니다.")
+                                f"{ORIGINAL_LANG_DIR} 폴더에 개역한글S.sdb가 필요합니다.")
             text.configure(state=tk.DISABLED)
             return
         verses = self.bethlehem_strongs.get_chapter_verses(our_bn, chapter)

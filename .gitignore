@@ -24,5 +24,6 @@ image.jpg
 사용법.txt
 *.png
 
-# Bethlehem original-language data (large, distributed separately)
+# Original-language data (bundled in release zip, not in git)
 BethlehemWin/
+original_lang/
