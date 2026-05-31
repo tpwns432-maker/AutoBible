@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -866,6 +866,7 @@ LIGHT_THEME = {
     'highlight_bg': '#FFE082', 'highlight_fg': '#1A1A2E',
     'select_bg': '#0D47A1', 'select_fg': '#FFFFFF',
     'scroll_thumb': '#B0B4BC', 'scroll_trough': '#ECECEC', 'scroll_active': '#8A9099',
+    'lex_hl_bg': '#FFF176',
     'accent': '#1565C0', 'accent_hover': '#0D47A1',
     'button_bg': '#E3F2FD', 'button_fg': '#1565C0', 'button_active': '#BBDEFB',
     'frame_bg': '#F5F5F5',
@@ -886,6 +887,7 @@ DARK_THEME = {
     'highlight_bg': '#F9E2AF', 'highlight_fg': '#1E1E2E',
     'select_bg': '#1E40AF', 'select_fg': '#FFFFFF',
     'scroll_thumb': '#6C7086', 'scroll_trough': '#11111B', 'scroll_active': '#9399B2',
+    'lex_hl_bg': '#585B70',
     'accent': '#89B4FA', 'accent_hover': '#74C7EC',
     'button_bg': '#313244', 'button_fg': '#89B4FA', 'button_active': '#45475A',
     'frame_bg': '#1E1E2E',
@@ -1523,9 +1525,15 @@ class AutoBibleApp:
 
         self._apply_viewer_font()
 
-        # Click/drag → copy formatted; Ctrl+wheel → font size
+        # Click/drag → copy formatted; Ctrl+wheel → font size (all panels)
         self.viewer_text.bind('<ButtonRelease-1>', self._on_viewer_text_release)
         self.viewer_text.bind('<Control-MouseWheel>', self._on_ctrl_wheel)
+        self.lex_mid_text.bind('<Control-MouseWheel>', self._on_ctrl_wheel)
+        self.lex_right_text.bind('<Control-MouseWheel>', self._on_ctrl_wheel)
+
+        # Arrow keys move between chapters (when not typing in a field)
+        self.root.bind('<Left>', self._on_arrow_prev)
+        self.root.bind('<Right>', self._on_arrow_next)
 
         self._populate_books()
 
@@ -1743,6 +1751,7 @@ class AutoBibleApp:
 
     def _render_lex_middle(self, our_bn, chapter):
         text = self.lex_mid_text
+        self._lex_hl_code = None   # tags are recreated below; clear stale highlight
         text.configure(state=tk.NORMAL)
         text.delete('1.0', tk.END)
         if not self.bethlehem_strongs:
@@ -1786,6 +1795,7 @@ class AutoBibleApp:
         if not code:
             return
         self._hide_tip()
+        self._highlight_lex_code(code)
         if event.state & 0x0004:   # Control held → independent window
             self._open_lex_popup(code, verse)
         else:
@@ -1797,8 +1807,26 @@ class AutoBibleApp:
         if not code:
             return
         self._hide_tip()
+        self._highlight_lex_code(code)
         self._open_lex_popup(code, verse)
         return 'break'
+
+    def _highlight_lex_code(self, code):
+        """Highlight every occurrence of `code` (same Strong's number) in the
+        original-language panel by tinting its shared sw_<code> tag."""
+        prev = getattr(self, '_lex_hl_code', None)
+        if prev and prev != code:
+            try:
+                self.lex_mid_text.tag_configure(f'sw_{prev}', background='')
+            except Exception:
+                pass
+        self._lex_hl_code = code
+        if code:
+            try:
+                self.lex_mid_text.tag_configure(
+                    f'sw_{code}', background=self.theme['lex_hl_bg'])
+            except Exception:
+                pass
 
     # ---- Hover preview ----
 
@@ -2609,6 +2637,12 @@ class AutoBibleApp:
         self.viewer_text.tag_configure('verse_num', font=(BODY_FONT, num_size, 'bold'))
         self.viewer_text.tag_configure('highlight', font=(BODY_FONT, size, 'bold'))
         self.viewer_text.tag_configure('highlight_num', font=(BODY_FONT, num_size, 'bold'))
+        # Apply the same size to the original-language and dictionary panels.
+        if hasattr(self, 'lex_mid_text'):
+            self.lex_mid_text.configure(font=(BODY_FONT, size))
+            self.lex_mid_text.tag_configure('lex_vnum', font=(BODY_FONT, num_size, 'bold'))
+        if hasattr(self, 'lex_right_text'):
+            self.lex_right_text.configure(font=(BODY_FONT, size))
 
     def _change_font_size(self, delta):
         cur = int(self.settings.get('viewer_font_size', 11))
@@ -2702,6 +2736,27 @@ class AutoBibleApp:
         verse_str = Formatter._format_verse_list(verse_nums, self.settings.get('range_symbol', '-'))
         self._append_log(f"[복사] {chapter}:{verse_str} → {len(parts)}개 버전\n")
 
+    def _nav_keys_allowed(self):
+        """Arrow-key chapter nav only on the viewer tab and not while a field
+        (entry / combobox / listbox) has focus."""
+        try:
+            if self.notebook.select() != str(self.tab_viewer):
+                return False
+            w = self.root.focus_get()
+            if isinstance(w, (tk.Entry, ttk.Combobox, tk.Listbox)):
+                return False
+        except Exception:
+            pass
+        return True
+
+    def _on_arrow_prev(self, event):
+        if self._nav_keys_allowed():
+            self._prev_chapter()
+
+    def _on_arrow_next(self, event):
+        if self._nav_keys_allowed():
+            self._next_chapter()
+
     def _prev_chapter(self):
         chapters = list(self.chapter_combo['values'])
         if not chapters:
@@ -2733,17 +2788,41 @@ class AutoBibleApp:
             self.monitoring = True
             self.monitor_btn.configure(text="  모니터링 중지  ")
             self._update_status("모니터링 중", True)
-            try:
-                self.last_clipboard = self.root.clipboard_get()
-            except Exception:
-                self.last_clipboard = ''
+            self.last_clipboard = self._clipboard_read()
             self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
             self.monitor_thread.start()
+
+    def _clipboard_read(self):
+        """Read clipboard text. On macOS, tkinter's clipboard_get can't fetch
+        text copied by other apps, so use pbpaste; elsewhere use tkinter."""
+        if sys.platform == 'darwin':
+            try:
+                r = subprocess.run(['pbpaste'], capture_output=True, timeout=2)
+                return r.stdout.decode('utf-8', 'replace')
+            except Exception:
+                return ''
+        try:
+            return self.root.clipboard_get()
+        except Exception:
+            return ''
+
+    def _clipboard_write(self, text):
+        if sys.platform == 'darwin':
+            try:
+                subprocess.run(['pbcopy'], input=text.encode('utf-8'), timeout=2)
+            except Exception:
+                pass
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(text)
+        except Exception:
+            pass
 
     def _monitor_loop(self):
         while self.monitoring:
             try:
-                current = self.root.clipboard_get()
+                current = self._clipboard_read()
                 if current != self.last_clipboard and current.strip():
                     self.last_clipboard = current
                     self._process_clipboard(current.strip())
@@ -2782,12 +2861,8 @@ class AutoBibleApp:
 
         if parts:
             result = '\n\n'.join(parts)
-            try:
-                self.root.clipboard_clear()
-                self.root.clipboard_append(result)
-                self.last_clipboard = result
-            except Exception:
-                pass
+            self._clipboard_write(result)
+            self.last_clipboard = result
 
             self.root.after(0, lambda: self._update_viewer_from_ref(book_num, chapter, verses))
 
@@ -3045,6 +3120,9 @@ class AutoBibleApp:
                 self._style_scrollbar(scr)
             self.lex_mid_text.tag_configure('lex_vnum', foreground=t['verse_num'])
             self.lex_mid_text.tag_configure('lex_word', foreground=t['accent'])
+            hl = getattr(self, '_lex_hl_code', None)
+            if hl:
+                self.lex_mid_text.tag_configure(f'sw_{hl}', background=t['lex_hl_bg'])
 
     def _apply_viewer_chip_theme(self):
         t = getattr(self, 'theme', None)
