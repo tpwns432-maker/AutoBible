@@ -29,12 +29,13 @@ jobs:
       - name: Build BibleClip.exe
         run: >
           python -m PyInstaller --onedir --windowed --noconfirm --clean
-          --icon=icon.ico --name BibleClip autobible.py
+          --collect-submodules bibleclip
+          --icon=icon.ico --name BibleClip bibleclip_app.py
 
       - name: Assemble package
         shell: pwsh
         run: |
-          $v = ([regex]::Match((Get-Content autobible.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
+          $v = ([regex]::Match((Get-Content bibleclip/_version.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
           "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Copy-Item icon.ico dist/BibleClip/ -Force
           New-Item -ItemType Directory -Force dist/BibleClip/bible_versions | Out-Null
@@ -70,14 +71,14 @@ jobs:
       - name: Build BibleClip.app
         run: |
           if [ -f icon.icns ]; then
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --icon=icon.icns --name BibleClip autobible.py
+            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --icon=icon.icns --name BibleClip bibleclip_app.py
           else
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --name BibleClip autobible.py
+            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --name BibleClip bibleclip_app.py
           fi
 
       - name: Assemble package
         run: |
-          V=$(python -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('autobible.py').read()).group(1))")
+          V=$(python -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('bibleclip/_version.py').read()).group(1))")
           if [ -d dist/BibleClip.app ]; then
             APP="dist/BibleClip.app"
           else

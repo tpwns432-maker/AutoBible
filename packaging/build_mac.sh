@@ -39,7 +39,7 @@ fi
 
 echo "==> Building BibleClip.app with PyInstaller"
 "$PYTHON" -m PyInstaller --onedir --windowed --noconfirm --clean \
-  --name BibleClip $ICON_ARG autobible.py
+  --collect-submodules bibleclip --name BibleClip $ICON_ARG bibleclip_app.py
 
 # Locate the produced .app (PyInstaller may place it at dist/BibleClip.app)
 APP=""
@@ -66,7 +66,7 @@ if [ -d "original_lang" ]; then
 fi
 
 # Stamp the real version into Info.plist (PyInstaller leaves 0.0.0)
-V=$(python3 -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('autobible.py').read()).group(1))" 2>/dev/null || echo "")
+V=$(python3 -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('bibleclip/_version.py').read()).group(1))" 2>/dev/null || echo "")
 if [ -n "$V" ]; then
   PLIST="$APP/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$PLIST" 2>/dev/null \

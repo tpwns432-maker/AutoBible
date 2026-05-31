@@ -2,7 +2,7 @@
 import os
 import sys
 
-__version__ = "1.5.0"
+from bibleclip._version import __version__
 
 IS_WINDOWS = sys.platform.startswith('win')
 
