@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
