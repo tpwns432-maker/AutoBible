@@ -20,7 +20,7 @@ import subprocess
 import datetime
 import webbrowser
 
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -365,20 +365,46 @@ def fetch_latest_release(timeout=8):
 
     tag = data.get('tag_name') or ''
     body = data.get('body') or ''
-    asset_url = ''
-    asset_name = ''
-    for asset in data.get('assets') or []:
-        name = asset.get('name', '')
-        if name.lower().endswith('.zip'):
-            asset_url = asset.get('browser_download_url', '')
-            asset_name = name
-            break
+    asset_url, asset_name = select_platform_asset(data.get('assets') or [])
     if not tag:
         return None, "릴리스에 태그가 없음"
     if not asset_url:
-        return None, f"릴리스 {tag}에 첨부된 .zip 파일이 없음"
+        return None, f"릴리스 {tag}에 이 OS에 맞는 .zip 파일이 없음"
     return ({'version': tag, 'download_url': asset_url,
              'asset_name': asset_name, 'body': body}, '')
+
+
+def select_platform_asset(assets):
+    """Pick the release .zip matching the current OS.
+
+    Releases may carry several platform zips (e.g. AutoBible-windows-*.zip,
+    AutoBible-macos-*.zip). Choose by OS keyword; fall back to a zip that does
+    not belong to another platform (handles legacy single-zip releases).
+    Returns (download_url, asset_name) or ('', '').
+    """
+    zips = [(a.get('name', ''), a.get('browser_download_url', ''))
+            for a in assets
+            if a.get('name', '').lower().endswith('.zip') and a.get('browser_download_url')]
+    if not zips:
+        return '', ''
+    if sys.platform == 'darwin':
+        want, avoid = ('macos', 'mac', 'darwin'), ('windows', 'win', 'linux')
+    elif IS_WINDOWS:
+        want, avoid = ('windows', 'win'), ('macos', 'darwin', 'linux')
+    else:
+        want, avoid = ('linux',), ('windows', 'win', 'macos', 'darwin')
+    # 1) explicit OS match
+    for name, url in zips:
+        low = name.lower()
+        if any(w in low for w in want):
+            return url, name
+    # 2) a zip not tagged for another OS (e.g. legacy single AutoBible-vX.zip)
+    for name, url in zips:
+        low = name.lower()
+        if not any(a in low for a in avoid):
+            return url, name
+    # 3) nothing suitable
+    return '', ''
 
 
 # ---------------------------------------------------------------------------
