@@ -3353,7 +3353,11 @@ class AutoBibleApp:
                 self.root.after(0, lambda: status.configure(text="앱 종료 후 교체합니다..."))
                 if is_mac:
                     sh_path = os.path.join(tmpdir, 'updater.sh')
-                    self._write_mac_updater_sh(sh_path, src_dir, BASE_DIR, os.getpid())
+                    # Replace the ACTUAL running bundle (its name may differ,
+                    # e.g. "AutoBible 2.app" on a name collision), not a
+                    # hardcoded AutoBible.app.
+                    app_dst = self._running_app_path() or os.path.join(BASE_DIR, 'AutoBible.app')
+                    self._write_mac_updater_sh(sh_path, src_dir, app_dst, os.getpid())
                     subprocess.Popen(['/bin/bash', sh_path],
                                      start_new_session=True, close_fds=True)
                     self.root.after(300, self._quit_for_update)
@@ -3373,17 +3377,32 @@ class AutoBibleApp:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _write_mac_updater_sh(self, path, src_dir, install_dir, pid):
-        """Bash updater: wait for the app to quit, swap the .app + data, relaunch."""
-        # POSIX path (this script only runs on macOS); avoid os.path.join so a
-        # build/test on Windows can't inject a backslash separator.
-        app_dst = install_dir.rstrip('/') + '/AutoBible.app'
+    def _running_app_path(self):
+        """Path of the currently running .app bundle (handles a renamed bundle
+        like 'AutoBible 2.app'), or None when not in a .app."""
+        if sys.platform != 'darwin':
+            return None
+        p = os.path.dirname(sys.executable)
+        while p and not p.endswith('.app'):
+            parent = os.path.dirname(p)
+            if parent == p:
+                return None
+            p = parent
+        return p if p.endswith('.app') else None
+
+    def _write_mac_updater_sh(self, path, src_dir, app_dst, pid):
+        """Bash updater: wait for the app to quit, swap the .app + data, relaunch.
+
+        app_dst is the FULL path of the bundle to replace (the running app,
+        whatever its name). The new bundle is always extracted as AutoBible.app.
+        """
+        dst_parent = os.path.dirname(app_dst.rstrip('/'))
         lines = [
             '#!/bin/bash',
             f'SRC={shlex.quote(src_dir)}',
-            f'DST={shlex.quote(install_dir)}',
+            f'DST={shlex.quote(dst_parent)}',
             f'APP={shlex.quote(app_dst)}',
-            f'LOG="$DST/update_apply.log"',
+            'LOG="$DST/update_apply.log"',
             'echo "[updater] start $(date)" > "$LOG"',
             # wait (max ~30s) for the running app to exit
             f'for i in $(seq 1 30); do kill -0 {int(pid)} 2>/dev/null || break; sleep 1; done',
