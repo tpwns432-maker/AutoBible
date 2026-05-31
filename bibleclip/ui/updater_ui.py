@@ -200,7 +200,7 @@ class UpdateMixin:
         status.pack(pady=4)
 
         def worker():
-            tmpdir = tempfile.mkdtemp(prefix='autobible_update_')
+            tmpdir = tempfile.mkdtemp(prefix='bibleclip_update_')
             try:
                 zip_path = os.path.join(tmpdir, info['asset_name'] or 'update.zip')
                 self._download_with_progress(info['download_url'], zip_path, pb, status, lbl)
