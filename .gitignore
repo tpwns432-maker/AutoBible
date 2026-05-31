@@ -9,6 +9,7 @@ dist/
 *.spec
 
 # User runtime data (created at first launch)
+bibleclip_settings.json
 autobible_settings.json
 *.log
 

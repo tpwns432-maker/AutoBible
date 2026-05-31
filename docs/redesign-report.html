@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BibleClip — 리디자인 통합 리포트 (미리보기 + 워크플로우)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f0b1a; --panel:#171127; --panel2:#1d1633; --line:#2a2140;
+    --fg:#ece9f5; --muted:#a99fc6; --dim:#7d7399;
+    --acc:#7c5cff; --acc2:#5b7cfa; --good:#46c160;
+    --grad:linear-gradient(135deg,#7c5cff,#5b7cfa);
+  }
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    line-height:1.7;-webkit-font-smoothing:antialiased}
+  .bg-grad{position:fixed;inset:0;z-index:-1;background:
+    radial-gradient(900px 500px at 80% -10%,rgba(124,92,255,.18),transparent 60%),
+    radial-gradient(700px 500px at -5% 10%,rgba(91,124,250,.14),transparent 55%);}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 22px}
+
+  header{padding:56px 0 26px;text-align:center}
+  .mk{width:54px;height:54px;border-radius:16px;background:var(--grad);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:25px;color:#fff;margin-bottom:18px;box-shadow:0 16px 40px -10px rgba(124,92,255,.6)}
+  .kick{font-size:12.5px;font-weight:700;letter-spacing:.14em;color:var(--acc);margin-bottom:10px}
+  h1{font-size:36px;font-weight:800;letter-spacing:-.02em;line-height:1.18;margin-bottom:12px}
+  h1 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .lead{font-size:15.5px;color:var(--muted);max-width:680px;margin:0 auto;line-height:1.8}
+
+  /* tier switcher */
+  .switch{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:28px 0 8px;position:sticky;top:0;z-index:20;
+    padding:14px 0;background:linear-gradient(180deg,var(--bg) 70%,transparent)}
+  .switch button{appearance:none;border:1px solid var(--line);background:var(--panel);color:#cfc9e4;
+    padding:12px 18px;border-radius:13px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s;
+    display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:215px;text-align:left}
+  .switch button small{font-weight:500;color:var(--dim);font-size:11.5px}
+  .switch button:hover{border-color:#3a3357;background:var(--panel2)}
+  .switch button.on{border-color:var(--acc);background:#1c1730;box-shadow:0 0 0 1px var(--acc) inset}
+  .switch button.on small{color:#b9aef0}
+
+  .stage{display:none}
+  .stage.on{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .sectitle{display:flex;align-items:center;gap:11px;margin:34px 0 16px}
+  .sectitle .n{width:28px;height:28px;border-radius:8px;background:var(--panel2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc)}
+  .sectitle h2{font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .sectitle .lbl{margin-left:auto;font-size:12px;font-weight:700;color:#fff;padding:4px 12px;border-radius:999px;background:var(--grad)}
+
+  .meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);padding:12px 16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+  .meta b{color:#e7e2f3}
+
+  /* mockup frame wrapper */
+  .frame{border-radius:14px;overflow:hidden;box-shadow:0 30px 80px -28px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.05)}
+
+  /* macOS chrome (shared) */
+  .chrome{height:36px;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:12px;position:relative}
+  .lights{display:flex;gap:7px}.lights i{width:11px;height:11px;border-radius:50%;display:block}
+  .lights .r{background:#ff5f57}.lights .y{background:#febc2e}.lights .g{background:#28c840}
+  .chrome .ttl{position:absolute;left:0;right:0;text-align:center;font-weight:600;pointer-events:none}
+  .cols{display:grid;grid-template-columns:1.05fr 1.05fr 1fr}
+  .strong{}
+
+  /* ---- LOW look ---- */
+  .low .frame{font-family:-apple-system,"Segoe UI","Noto Sans KR",sans-serif}
+  .low .chrome{background:#e8eaed;border-bottom:1px solid #d3d7dd;color:#5d636c}
+  .low .app{background:#f4f5f7}
+  .low .topbar{display:flex;align-items:center;gap:10px;padding:9px 13px;background:#fbfbfc;border-bottom:1px solid #dde0e5}
+  .low .logo{font-weight:700;font-size:14px;color:#1b1f24}
+  .low .btn{font-size:12px;padding:5px 11px;border-radius:5px;border:1px solid #c7ccd3;background:#fff;color:#2b3038}
+  .low .btn.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  .low .badge{font-size:11.5px;color:#b3261e;font-weight:600}.low .sp{flex:1}
+  .low .tabs{display:flex;gap:2px;padding:7px 13px 0;background:#fbfbfc;border-bottom:1px solid #dde0e5}
+  .low .tab{font-size:12.5px;padding:6px 13px;border:1px solid transparent;border-bottom:none;border-radius:5px 5px 0 0;color:#5d636c}
+  .low .tab.on{background:#fff;border-color:#dde0e5;color:#1b1f24;font-weight:600;margin-bottom:-1px}
+  .low .ctrls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:9px 13px;background:#fff;border-bottom:1px solid #dde0e5;font-size:12px;color:#444}
+  .low .pill{border:1px solid #c7ccd3;border-radius:5px;background:#fff;padding:3px 8px}
+  .low .pill.sel{border-color:#1f6feb;color:#1f6feb;font-weight:600}
+  .low .mini{border:1px solid #c7ccd3;background:#fff;border-radius:4px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;color:#444}
+  .low .col{border-right:1px solid #e4e7eb;min-height:300px;background:#fff}.low .col:last-child{border-right:none}
+  .low .colh{font-size:11.5px;font-weight:600;color:#5d636c;padding:7px 12px;background:#f1f3f5;border-bottom:1px solid #e4e7eb}
+  .low .colbody{padding:9px 13px;font-size:13px;line-height:1.7;color:#222}
+  .low .v{margin-bottom:8px}.low .vtag{color:#1f6feb;font-weight:700;font-size:11px;margin-right:4px}
+  .low .strong{color:#1f6feb;font-size:.76em;vertical-align:super}
+  .low .lexh{color:#1f6feb;font-weight:700;margin-bottom:5px}.low .heb{font-size:18px}
+
+  /* ---- MEDIUM look ---- */
+  .med .frame{font-family:"Inter","Segoe UI","Noto Sans KR",sans-serif}
+  .med .chrome{background:#22262e;border-bottom:1px solid #2c313a;color:#9aa3af}
+  .med .app{background:#eef0f4;padding:13px}
+  .med .topbar{display:flex;align-items:center;gap:10px;background:#fff;padding:11px 15px;border-radius:13px;box-shadow:0 1px 3px rgba(20,30,50,.06);margin-bottom:11px}
+  .med .logo{font-weight:800;font-size:15px;color:#10141b}.med .logo span{color:#2f6df6}
+  .med .btn{font-size:12px;padding:7px 14px;border-radius:999px;border:1px solid #dde1e8;background:#fff;color:#384150;font-weight:600}
+  .med .btn.primary{background:#2f6df6;border-color:#2f6df6;color:#fff;box-shadow:0 4px 12px -3px rgba(47,109,246,.5)}
+  .med .badge{font-size:11px;font-weight:700;color:#b06a00;background:#fff3df;border:1px solid #ffe2b0;padding:5px 10px;border-radius:999px}
+  .med .sp{flex:1}
+  .med .seg{display:inline-flex;background:#e6e9f0;border-radius:999px;padding:4px;gap:2px;margin-bottom:11px}
+  .med .seg .s{font-size:12px;padding:6px 14px;border-radius:999px;color:#5b6472;font-weight:600}
+  .med .seg .s.on{background:#fff;color:#10141b;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .med .ctrls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#fff;padding:10px 13px;border-radius:13px;box-shadow:0 1px 3px rgba(20,30,50,.06);margin-bottom:11px;font-size:12px;color:#4a5260}
+  .med .pill{border:1px solid #e1e5ec;border-radius:999px;background:#fafbfd;padding:5px 11px;font-weight:600;color:#384150}
+  .med .pill.sel{border-color:#2f6df6;color:#2f6df6;background:#eef4ff}
+  .med .mini{border:1px solid #e1e5ec;background:#fafbfd;border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;color:#4a5260;font-weight:600}
+  .med .cols{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(20,30,50,.06)}
+  .med .col{border-right:1px solid #eef0f3;min-height:300px}.med .col:last-child{border-right:none}
+  .med .colh{font-size:11px;font-weight:700;color:#8a93a1;padding:11px 15px 7px}
+  .med .colbody{padding:3px 15px 13px;font-size:13px;line-height:1.75;color:#1c2430}
+  .med .v{margin-bottom:10px}
+  .med .vtag{display:inline-block;font-size:10px;font-weight:700;color:#2f6df6;background:#eef4ff;border-radius:6px;padding:1px 6px;margin-right:5px}
+  .med .strong{display:inline-block;font-size:9px;color:#7b8494;background:#f1f3f7;border-radius:5px;padding:0 4px;vertical-align:middle;margin:0 1px;font-weight:600}
+  .med .lexh{color:#2f6df6;font-weight:800;margin-bottom:5px}.med .heb{font-size:20px}
+
+  /* ---- HIGH look ---- */
+  .high .frame{font-family:"Inter","Segoe UI","Noto Sans KR",sans-serif}
+  .high .chrome{background:linear-gradient(180deg,#1b1430,#171022);border-bottom:1px solid #2a2140;color:#b3a7d6}
+  .high .app{display:flex;background:#faf9fc;min-height:380px}
+  .high .rail{width:58px;background:#1a1330;display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:5px}
+  .high .rail .m{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#7c5cff,#5b7cfa);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;margin-bottom:12px}
+  .high .rail .ic{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#9d92c4;font-size:16px}
+  .high .rail .ic.on{background:rgba(255,255,255,.08);color:#fff}
+  .high .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .high .topbar{display:flex;align-items:center;gap:12px;padding:15px 20px}
+  .high .logo{font-weight:800;font-size:16px;color:#1a1330}
+  .high .ver{font-size:10.5px;color:#a99fc0;font-weight:600;background:#f0ecf8;padding:2px 8px;border-radius:999px}
+  .high .sp{flex:1}
+  .high .btn{font-size:12px;padding:8px 14px;border-radius:10px;border:1px solid #e7e2f0;background:#fff;color:#473d63;font-weight:600}
+  .high .btn.primary{background:linear-gradient(135deg,#6d4dff,#5b7cfa);border:none;color:#fff;box-shadow:0 8px 20px -6px rgba(109,77,255,.55)}
+  .high .badge{font-size:11px;font-weight:700;color:#5b8f5b;background:#eef7ee;border:1px solid #d6ecd6;padding:5px 11px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+  .high .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:#46c160;box-shadow:0 0 0 3px rgba(70,193,96,.2)}
+  .high .ctrls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:0 20px 13px;font-size:12px;color:#6a6086}
+  .high .seg{display:inline-flex;background:#f0ecf8;border-radius:11px;padding:4px;gap:2px}
+  .high .seg .s{font-size:12px;padding:6px 13px;border-radius:8px;color:#6a6086;font-weight:600}
+  .high .seg .s.on{background:#fff;color:#1a1330;box-shadow:0 2px 6px rgba(60,40,100,.12)}
+  .high .pill{border:1px solid #e7e2f0;border-radius:10px;background:#fff;padding:6px 12px;font-weight:600;color:#473d63}
+  .high .pill.sel{border-color:#6d4dff;color:#6d4dff;background:#f3effe}
+  .high .mini{border:1px solid #e7e2f0;background:#fff;border-radius:9px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;color:#6a6086;font-weight:700}
+  .high .cols{flex:1;padding:0 20px 16px;display:grid;grid-template-columns:1.05fr 1.05fr 1fr;gap:12px}
+  .high .col{background:#fff;border:1px solid #efebf6;border-radius:16px;min-height:280px;box-shadow:0 6px 22px -14px rgba(60,40,100,.25);overflow:hidden}
+  .high .colh{font-size:10.5px;font-weight:700;letter-spacing:.05em;color:#a99fc0;padding:14px 16px 5px}
+  .high .colbody{padding:2px 16px 14px}
+  .high .scripture{font-family:"Iowan Old Style",Palatino,Georgia,"Noto Serif KR",serif;font-size:14.5px;line-height:1.9;color:#241d33}
+  .high .v{margin-bottom:11px}
+  .high .vtag{color:#6d4dff;font-weight:800;font-size:.7em;vertical-align:super;margin-right:3px;font-family:Inter,sans-serif}
+  .high .interlin{font-size:13px;line-height:1.9;color:#2b2440}
+  .high .strong{display:inline-block;font-size:9px;color:#8a7fb0;background:#f4f1fb;border-radius:6px;padding:1px 5px;margin:0 1px;font-weight:700;vertical-align:middle}
+  .high .lexh{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+  .high .lexh .heb{font-size:24px;color:#1a1330}.high .lexh .rom{color:#6d4dff;font-weight:700;font-size:13.5px}
+  .high .lex{font-size:12.5px;line-height:1.8;color:#4a4264}
+  .high .chip{display:inline-block;font-size:10.5px;font-weight:700;color:#6d4dff;background:#f3effe;border-radius:8px;padding:2px 9px;margin-bottom:7px}
+
+  /* workflow timeline (report theme) */
+  .tl{position:relative;margin:6px 0 0 8px;padding-left:28px}
+  .tl::before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,var(--acc),var(--acc2),transparent)}
+  .step{position:relative;margin-bottom:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 20px}
+  .step::before{content:"";position:absolute;left:-28px;top:22px;width:14px;height:14px;border-radius:50%;background:var(--bg);border:3px solid var(--acc);box-shadow:0 0 0 4px rgba(124,92,255,.12)}
+  .step .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+  .step .ph{font-size:11.5px;font-weight:800;color:var(--acc);letter-spacing:.04em}
+  .step h3{font-size:15.5px;font-weight:700}
+  .step .dur{margin-left:auto;font-size:11.5px;font-weight:600;color:#d9d3ef;background:var(--panel2);border:1px solid var(--line);padding:3px 11px;border-radius:999px}
+  .step p{font-size:13px;color:var(--muted)}
+  .step .del{margin-top:8px;font-size:12px;color:#cbe6cf;background:rgba(70,193,96,.08);border:1px solid rgba(70,193,96,.22);border-radius:9px;padding:6px 11px}
+  .step .del b{color:var(--good)}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:.88em;color:#d9d3ef}
+
+  .ceiling{display:flex;gap:13px;background:linear-gradient(135deg,rgba(124,92,255,.1),rgba(91,124,250,.06));border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-top:12px}
+  .ceiling .ic{font-size:20px}.ceiling p{font-size:13.5px;color:#ded8f0}.ceiling b{color:#fff}
+
+  /* final compare */
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-top:6px}
+  th,td{text-align:left;padding:12px 15px;font-size:13px;border-bottom:1px solid var(--line)}
+  th{background:var(--panel2);font-size:11.5px;color:var(--dim)}
+  tr:last-child td{border-bottom:none}
+  .em{color:#fff;font-weight:700}
+  footer{padding:36px 0 60px;text-align:center;color:var(--dim);font-size:12px}
+  @media(max-width:820px){.switch button{min-width:0;flex:1}.high .app{display:block}.high .rail{flex-direction:row;width:auto}}
+</style>
+</head>
+<body>
+<div class="bg-grad"></div>
+<div class="wrap">
+  <header>
+    <div class="mk">B</div>
+    <div class="kick">BIBLECLIP · UI 현대화 통합 리포트</div>
+    <h1>리디자인 <span>미리보기 + 워크플로우</span></h1>
+    <p class="lead">3가지 노력 단계(Low / Medium / High)별로 <b style="color:#ded8f0">"어떤 모습이 되는지(미리보기)"</b> 와 <b style="color:#ded8f0">"어떻게 만들지(워크플로우)"</b> 를 한 곳에 정리했습니다. 위 버튼으로 단계를 전환하세요. 모든 단계에서 파싱·클립보드 엔진은 그대로 재사용됩니다.</p>
+  </header>
+
+  <div class="switch">
+    <button class="on" data-t="low" onclick="pick('low',this)">① Low — 테마 교체<small>제일 빠름 · 약 1~2일</small></button>
+    <button data-t="med" onclick="pick('med',this)">② Medium — CustomTkinter<small>위젯 재구성 · 약 1~2주</small></button>
+    <button data-t="high" onclick="pick('high',this)">③ High — 전체 리라이트<small>웹 디자인 시스템 · 4~8주+</small></button>
+  </div>
+
+  <div class="stage low on" id="st-low"></div>
+  <div class="stage med" id="st-med"></div>
+  <div class="stage high" id="st-high"></div>
+
+  <div class="sectitle"><div class="n">≡</div><h2>세 단계 한눈에 비교</h2></div>
+  <table>
+    <tr><th>항목</th><th>① Low</th><th>② Medium</th><th>③ High</th></tr>
+    <tr><td>겉모습</td><td>오늘보다 깔끔</td><td>확실히 모던</td><td class="em">앱스토어급</td></tr>
+    <tr><td>기술</td><td>sv-ttk / ttkbootstrap</td><td>CustomTkinter</td><td>pywebview (웹)</td></tr>
+    <tr><td>기간</td><td class="em">약 1~2일</td><td>약 1~2주</td><td>약 4~8주+</td></tr>
+    <tr><td>리스크</td><td class="em">매우 낮음</td><td>중간</td><td>높음</td></tr>
+    <tr><td>코드</td><td>그대로(테마만)</td><td>UI 재작성·로직 유지</td><td>프론트 신규·엔진 재사용</td></tr>
+    <tr><td>한계(천장)</td><td>여전히 "툴킷" 느낌</td><td>둥근 카드까지</td><td class="em">자유도 100%</td></tr>
+  </table>
+
+  <footer>BibleClip 리디자인 통합 리포트 · 미리보기는 시각적 근사치이며, Low/Medium의 실제 Tkinter 결과는 약간 단순할 수 있습니다.</footer>
+</div>
+
+<script>
+const verses=[
+ [1,"여호와의<sup class='strong'>H3068</sup> 종<sup class='strong'>H5650</sup> 모세가<sup class='strong'>H4872</sup> 죽은 후에 여호와께서 모세의 시종 눈의 아들 여호수아<sup class='strong'>H3091</sup>에게 일러 가라사대"],
+ [2,"내 종 모세가 죽었으니 이제 너는 이 모든 백성으로 더불어 일어나<sup class='strong'>H6965</sup> 이 요단<sup class='strong'>H3383</sup>을 건너 내가 그들 곧 이스라엘 자손에게 주는 땅으로 가라"],
+ [3,"내가 모세에게 말한 바와 같이 무릇 너희 발바닥으로 밟는 곳을 내가 다 너희에게 주었노니"],
+ [4,"곧 광야와 이 레바논에서부터 큰 하수 유브라데에 이르는 헷 족속의 온 땅과 또 해 지는 편 대해까지 너희 지경이 되리라"],
+];
+const inter=[
+ "<b>1</b> 여호와의<sup class='strong'>H3068</sup> 종<sup class='strong'>H5650</sup> 모세가<sup class='strong'>H4872</sup> 죽은<sup class='strong'>H4194</sup> 후<sup class='strong'>H310</sup> 여호와께서<sup class='strong'>H3068</sup> 눈<sup class='strong'>H5126</sup>의 아들<sup class='strong'>H1121</sup> 여호수아<sup class='strong'>H3091</sup>에게 일러<sup class='strong'>H559</sup>",
+ "<b>2</b> 내 종<sup class='strong'>H5650</sup> 모세<sup class='strong'>H4872</sup> 죽었으니<sup class='strong'>H4191</sup> 이제<sup class='strong'>H6258</sup> 일어나<sup class='strong'>H6965</sup> 요단<sup class='strong'>H3383</sup>을 건너<sup class='strong'>H5674</sup>",
+];
+const lex=`<p>여호와는 이스라엘의 하나님을 나타내는 고유명사이며, '여호와, 야웨'로 음역한다. 본래 히브리어 4자음 문자 '요드, 헤, 와우, 헤(YHWH)'로 구성되어 있다.</p><p>이 신성 4문자는 하나님의 인격적 이름으로 구약성경에 약 6,000여회 나타난다.</p>`;
+
+function mock(t){
+ const vs=verses.map(v=>`<div class="v"><span class="vtag">${t==='high'?v[0]:'KRV '+v[0]}</span>${t==='high'?v[1].replace(/<sup class='strong'>(H\d+)<\/sup>/g,"<span class='strong'>$1</span>"):v[1]}</div>`).join("");
+ const it=inter.map(x=>`<div class="v">${x}</div>`).join("");
+ if(t==='low') return `<div class="frame"><div class="chrome"><div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="ttl">BibleClip v1.3.1</div></div><div class="app">
+   <div class="topbar"><span class="logo">BibleClip</span><button class="btn primary">모니터링 시작</button><span class="badge">● 대기 중</span><span class="sp"></span><button class="btn">업데이트 확인</button><button class="btn">다크 모드</button></div>
+   <div class="tabs"><div class="tab on">성경 보기</div><div class="tab">출력 설정</div></div>
+   <div class="ctrls"><span>버전</span><span class="pill sel">☑ KRV</span><span>책</span><span class="pill">여호수아 ▾</span><span>장</span><span class="pill">1 ▾</span><span class="mini">‹</span><span class="mini">›</span><span class="sp"></span><span class="pill sel">한글</span><span class="pill">영어</span><span class="mini">A−</span><span class="mini">A+</span></div>
+   <div class="cols"><div class="col"><div class="colh">성경 본문</div><div class="colbody">${vs}</div></div><div class="col"><div class="colh">원어 (단어 클릭)</div><div class="colbody">${it}</div></div><div class="col"><div class="colh">사전</div><div class="colbody"><div class="lexh">[H3068] <span class="heb">יהוה</span> 여호와</div>${lex}</div></div></div>
+   </div></div>`;
+ if(t==='med') return `<div class="frame"><div class="chrome"><div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="ttl">BibleClip</div></div><div class="app">
+   <div class="topbar"><span class="logo">Bible<span>Clip</span></span><button class="btn primary">▶ 모니터링 시작</button><span class="badge">대기 중</span><span class="sp"></span><button class="btn">업데이트 확인</button><button class="btn">🌙 다크</button></div>
+   <div class="seg"><div class="s on">성경 보기</div><div class="s">출력 설정</div></div>
+   <div class="ctrls"><span class="pill sel">☑ KRV</span><span class="pill">여호수아 ▾</span><span class="pill">1장 ▾</span><span class="mini">‹</span><span class="mini">›</span><span class="sp"></span><span class="pill sel">한글</span><span class="pill">영어</span><span class="mini">A−</span><span class="mini">A+</span></div>
+   <div class="cols"><div class="col"><div class="colh">성경 본문</div><div class="colbody">${vs}</div></div><div class="col"><div class="colh">원어 · 단어 클릭</div><div class="colbody">${it}</div></div><div class="col"><div class="colh">사전</div><div class="colbody"><div class="lexh"><span class="heb">יהוה</span> 여호와</div><div style="font-size:10.5px;color:#8a93a1;margin:-2px 0 7px">[H3068] · Yhwh</div>${lex}</div></div></div>
+   </div></div>`;
+ return `<div class="frame"><div class="chrome"><div class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></div><div class="ttl">BibleClip</div></div><div class="app">
+   <div class="rail"><div class="m">B</div><div class="ic on">📖</div><div class="ic">🔎</div><div class="ic">📋</div><div class="ic">📑</div><span style="flex:1"></span><div class="ic">⚙</div></div>
+   <div class="main"><div class="topbar"><span class="logo">BibleClip</span><span class="ver">v1.3.1</span><span class="sp"></span><button class="btn primary">모니터링 시작</button><span class="badge">대기 중</span><button class="btn">업데이트</button><button class="btn">다크 모드</button></div>
+   <div class="ctrls"><div class="seg"><div class="s on">성경 보기</div><div class="s">출력 설정</div></div><span class="pill sel">KRV</span><span class="pill">여호수아 ▾</span><span class="pill">1장 ▾</span><span class="mini">‹</span><span class="mini">›</span><span class="sp"></span><span class="seg"><span class="s on">한글</span><span class="s">영어</span></span></div>
+   <div class="cols"><div class="col"><div class="colh">성경 본문 · 여호수아 1</div><div class="colbody scripture">${vs}</div></div><div class="col"><div class="colh">원어 · 단어 클릭</div><div class="colbody interlin">${it}</div></div><div class="col"><div class="colh">사전</div><div class="colbody"><span class="chip">H3068</span><div class="lexh"><span class="heb">יהוה</span><span class="rom">여호와 · Yhwh</span></div><div class="lex">${lex}</div></div></div></div>
+   </div></div></div>`;
+}
+
+const flows={
+ low:[
+  ["PHASE 0","테마 선택 & 설치","0.5일","<code>sv-ttk</code>(윈11 'Sun Valley' 룩) 또는 <code>ttkbootstrap</code> 중 선택해 설치하고, 앱에 기본 테마를 적용.","테마가 적용된 채로 앱이 그대로 실행됨."],
+  ["PHASE 1","위젯 스타일 통일","0.5~1일","ttk 위젯(버튼·탭·입력칸·스크롤바)을 테마 스타일로 교체하고, 기존 커스텀 <code>_style_button</code> 류와 충돌 정리.","모든 컨트롤이 일관된 모던 룩."],
+  ["PHASE 2","간격·폰트·강조색 정리","0.5일","여백/폰트 크기 통일, 단일 강조색 적용, 인라인 파란 스트롱 번호를 작은 회색 톤으로 정돈. 레이아웃은 그대로.","화면이 한결 깔끔하고 정돈됨."],
+  ["PHASE 3","라이트/다크 점검 & 패키징","0.5일","다크 모드 테마 매핑 확인, PyInstaller 재빌드.","바로 배포 가능한 빌드."],
+ ],
+ med:[
+  ["PHASE 0","CustomTkinter 도입","1일","<code>customtkinter</code> 추가, appearance mode(라이트/다크)와 기본 테마·폰트 설정.","CTk 윈도우가 뜨고 기본 위젯이 동작."],
+  ["PHASE 1","상단바 & 탭 재구성","2일","로고·버튼을 필(pill) 버튼으로, 탭을 세그먼트 컨트롤로, 상태를 컬러 배지로 재구현.","상단 영역이 모던 컴포넌트로 교체됨."],
+  ["PHASE 2","3분할 레이아웃 재구축","3~5일","3개 텍스트 패널을 <code>CTkFrame</code>(카드) + <code>CTkTextbox</code>로 재배치. 리사이즈 가능한 분할 패널이 핵심 난관.","카드형 3분할 본문/원어/사전 레이아웃."],
+  ["PHASE 3","컨트롤·칩·사전 패널 스타일","2~3일","입력 컨트롤 라운드화, 스트롱 번호를 칩으로, 사전 팝업을 깔끔한 패널로.","현재 기능과 동등 + 모던 룩."],
+  ["PHASE 4","다크 모드 · 폴리싱 · 패키징","2일","라이트/다크 토글, 여백·상태 다듬기, PyInstaller 빌드.","'완성된 느낌'의 빌드."],
+ ],
+ high:[
+  ["PHASE 0","엔진 분리","1~2일","UI 외 모든 코드를 <code>engine/</code> 모듈로 분리하고 깔끔한 API로 정리(<code>get_chapter()</code>, <code>lookup_strong()</code>, <code>parse_reference()</code>, <code>start_monitoring(callback)</code>). 동작 변경 없음.","UI 없이 엔진 단독 실행·테스트 가능."],
+  ["PHASE 1","디자인 시스템","2~4일","하이엔드 목업을 실제 CSS 토큰으로 — 색상, 세리프 본문 폰트, 간격 스케일, 카드·사이드바·필 컴포넌트.","제품 수준의 정적 스타일 페이지."],
+  ["PHASE 2","브리지 연결","2~3일","pywebview 구동, 엔진 API를 JS에 노출, SQLite에서 실제 장을 렌더.","책+장 선택 → 실제 KRV 본문 표시."],
+  ["PHASE 3","3개 패널 구현","1~2주","본문·원어(클릭형 스트롱)·사전 패널, 떠다니던 사전 창을 앱 내 패널로, 출력 설정 탭, 클립보드 감시 실시간 반영.","현재 기능 100% 동등 + 모던."],
+  ["PHASE 4","폴리싱 & 상태","3~5일","다크 모드, 빈/로딩 상태, 마이크로 인터랙션, 단축키, <code>output_order</code> UX 개선.","완성도 높은 단계."],
+  ["PHASE 5","패키징 & 서명","2~4일","PyInstaller 번들 + Developer ID 서명·공증으로 <code>xattr</code> 단계 제거.","더블클릭으로 열리는 .app."],
+ ],
+};
+const ceilings={
+ low:"⚠️ <b>한계:</b> 레이아웃과 위젯 구조는 그대로라 여전히 '데스크톱 툴킷' 느낌이 남습니다. 가장 싸고 안전하지만, 변화 폭도 가장 작습니다.",
+ med:"⚖️ <b>균형점:</b> 둥근 카드·다크 모드까지 확실히 모던해지고 순수 Python 한 코드베이스를 유지합니다. 다만 리사이즈 3분할 텍스트 등 일부 커스텀 위젯은 손이 많이 갑니다.",
+ high:"💡 <b>장점:</b> Phase 2 이후 완전히 점진적이라 '한 방에 갈아엎기' 리스크가 없습니다. 자유도 100%지만 프론트엔드를 새로 만드는 가장 큰 노력이 듭니다(엔진은 재사용)."
+};
+const metas={
+ low:["겉모습","오늘보다 깔끔","기술","Tkinter + sv-ttk","리스크","매우 낮음","코드","테마만 변경"],
+ med:["겉모습","확실히 모던","기술","CustomTkinter","리스크","중간","코드","UI 재작성·로직 유지"],
+ high:["겉모습","앱스토어급","기술","pywebview(웹)","리스크","높음","코드","프론트 신규·엔진 재사용"]
+};
+const labels={low:"① Low",med:"② Medium",high:"③ High"};
+
+function render(t){
+ const m=metas[t];let meta="";for(let i=0;i<m.length;i+=2)meta+=`<span><b>${m[i]}:</b> ${m[i+1]}</span>`;
+ const steps=flows[t].map(s=>`<div class="step"><div class="top"><span class="ph">${s[0]}</span><h3>${s[1]}</h3><span class="dur">${s[2]}</span></div><p>${s[3]}</p><div class="del"><b>산출물:</b> ${s[4]}</div></div>`).join("");
+ return `<div class="meta">${meta}</div><div class="sectitle"><div class="n">◐</div><h2>미리보기</h2><span class="lbl">${labels[t]}</span></div>${mock(t)}
+  <div class="sectitle"><div class="n">⛓</div><h2>워크플로우</h2><span class="lbl">${labels[t]}</span></div><div class="tl">${steps}</div>
+  <div class="ceiling"><div class="ic">${t==='low'?'⚠️':t==='med'?'⚖️':'💡'}</div><p>${ceilings[t].replace(/^[^ ]+ /,'')}</p></div>`;
+}
+['low','med','high'].forEach(t=>document.getElementById('st-'+t).innerHTML=render(t));
+
+function pick(t,el){
+ document.querySelectorAll('.switch button').forEach(b=>b.classList.remove('on'));el.classList.add('on');
+ document.querySelectorAll('.stage').forEach(s=>s.classList.remove('on'));document.getElementById('st-'+t).classList.add('on');
+ window.scrollTo({top:0,behavior:'instant'});
+}
+</script>
+</body>
+</html>

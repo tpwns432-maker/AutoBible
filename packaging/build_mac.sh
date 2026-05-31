@@ -10,7 +10,7 @@
 # =====================================================================
 set -e
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."   # packaging/ -> project root
 
 echo "==> Python / pip check"
 PYTHON="${PYTHON:-python3}"

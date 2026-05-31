@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BibleClip 모듈화 파이프라인</title>
+<style>
+  :root{
+    --accent:#6D4DFF; --accent2:#9A86FF; --ink:#1c1b2e; --muted:#6b6880;
+    --bg:#f7f6fb; --card:#ffffff; --line:#e7e4f2; --code:#f3f1fb;
+    --ok:#1f9d6b; --warn:#d98a00; --danger:#d6455d;
+    --mono:'D2Coding','Consolas','SFMono-Regular',Menlo,monospace;
+    --sans:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;
+       -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px 120px;}
+  header{background:linear-gradient(135deg,#6D4DFF 0%,#9A86FF 100%);color:#fff;
+         padding:56px 24px 48px;margin-bottom:40px;}
+  header .inner{max-width:1040px;margin:0 auto;}
+  header .kicker{font-size:13px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;font-weight:600;}
+  header h1{margin:.3em 0 .2em;font-size:34px;font-weight:800;letter-spacing:-.02em;}
+  header p{margin:0;font-size:17px;opacity:.92;max-width:680px;}
+  header .meta{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;}
+  header .pill{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);
+        padding:6px 13px;border-radius:999px;font-size:13px;font-weight:600;}
+  h2{font-size:23px;font-weight:800;margin:52px 0 8px;letter-spacing:-.01em;
+     display:flex;align-items:center;gap:12px;}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+        background:var(--accent);color:#fff;border-radius:10px;font-size:16px;flex:0 0 auto;}
+  h3{font-size:17px;font-weight:700;margin:30px 0 6px;color:var(--ink);}
+  .lead{color:var(--muted);font-size:15.5px;margin:0 0 8px;}
+  p{margin:10px 0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 26px;
+        margin:18px 0;box-shadow:0 1px 2px rgba(40,30,90,.04);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}.wrap{padding:0 16px 80px}}
+  code{font-family:var(--mono);background:var(--code);padding:2px 6px;border-radius:5px;font-size:.9em;color:#4a32c9;}
+  pre{font-family:var(--mono);background:#1c1b2e;color:#e8e6f5;padding:20px 22px;border-radius:14px;
+      overflow-x:auto;font-size:13.5px;line-height:1.6;}
+  pre .c{color:#7d78a8;} pre .a{color:#b9a8ff;} pre .g{color:#7fe0b0;} pre .y{color:#ffd479;} pre .d{color:#ff8da0;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:var(--code);font-weight:700;font-size:13px;color:#4a32c9;}
+  tr:last-child td{border-bottom:none;}
+  td.mono,th.mono{font-family:var(--mono);font-size:13px;}
+  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;}
+  .tag.new{background:#eafaf2;color:var(--ok);} .tag.keep{background:#eef1ff;color:var(--accent);}
+  .tag.split{background:#fff4e1;color:var(--warn);} .tag.del{background:#fdeaed;color:var(--danger);}
+  .bar{height:22px;border-radius:6px;background:var(--accent);display:inline-block;vertical-align:middle;}
+  .barwrap{display:flex;align-items:center;gap:10px;margin:4px 0;}
+  .barwrap .lbl{font-size:13px;width:200px;flex:0 0 auto;font-family:var(--mono);}
+  .barwrap .num{font-size:12px;color:var(--muted);}
+  .note{border-left:4px solid var(--accent);background:#f4f1ff;padding:14px 18px;border-radius:0 12px 12px 0;margin:16px 0;}
+  .note.warn{border-color:var(--warn);background:#fff8ec;}
+  .note.danger{border-color:var(--danger);background:#fdeef0;}
+  .note.ok{border-color:var(--ok);background:#edf9f2;}
+  .note b{color:var(--ink);}
+  ul.steps{list-style:none;padding:0;margin:0;counter-reset:s;}
+  ul.steps>li{position:relative;padding:4px 0 22px 50px;border-left:2px solid var(--line);margin-left:16px;}
+  ul.steps>li:last-child{border-left:2px solid transparent;}
+  ul.steps>li::before{counter-increment:s;content:counter(s);position:absolute;left:-17px;top:0;
+       width:32px;height:32px;background:#fff;border:2px solid var(--accent);color:var(--accent);
+       border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  ul.steps>li h4{margin:2px 0 6px;font-size:16px;}
+  .gate{display:inline-block;background:#edf9f2;color:var(--ok);border:1px solid #bfe8d4;
+        padding:3px 11px;border-radius:8px;font-size:12.5px;font-weight:700;margin-top:6px;}
+  .phase{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:10px 0 0;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
+  footer{color:var(--muted);font-size:13px;text-align:center;margin-top:60px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <div class="kicker">BibleClip · Refactoring Plan</div>
+    <h1>코드 모듈화 파이프라인</h1>
+    <p>3,764줄 단일 파일 <code style="background:rgba(255,255,255,.2);color:#fff">autobible.py</code> 를
+       기능별 패키지로 분할합니다. 동작·기능은 100% 동일, 위험은 단계별 검증으로 0에 수렴.</p>
+    <div class="meta">
+      <span class="pill">현재 1개 파일 · 3,764줄</span>
+      <span class="pill">목표 18개 모듈 · 평균 ~210줄</span>
+      <span class="pill">v1.5.0 → v1.6.0</span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+<!-- ============ WHY ============ -->
+<h2><span class="n">1</span>왜 나누는가</h2>
+<p class="lead">한 파일이 너무 커서, 작은 수정에도 파일 전체가 컨텍스트에 올라가 토큰이 과소비됩니다.</p>
+<div class="card">
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">지금의 문제</h3>
+      <ul>
+        <li><b>편집 비용</b> — 버튼 색 하나 바꿔도 16만 자(≈3,764줄) 전체를 읽어야 함</li>
+        <li><b>탐색 비용</b> — 검색 로직 위치 찾기, 테마 키 확인 등 매번 풀스캔</li>
+        <li><b>충돌 위험</b> — 한 파일에 모든 게 있어 작은 실수가 전체에 영향</li>
+        <li><b>거대 클래스</b> — <code>BibleClipApp</code> 한 클래스가 <b>2,600줄(70%)</b></li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">나눈 뒤</h3>
+      <ul>
+        <li><b>국소 편집</b> — 검색 고치려면 <code>search.py</code>(~90줄)만 열면 됨</li>
+        <li><b>토큰 ↓</b> — 작업당 읽는 양이 평균 <b>5~15%</b>로 감소</li>
+        <li><b>명확한 경계</b> — 데이터/UI/업데이트/테마가 물리적으로 분리</li>
+        <li><b>안전</b> — 모듈 단위 테스트·롤백 가능</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CURRENT MAP ============ -->
+<h2><span class="n">2</span>현재 파일 해부</h2>
+<p class="lead">관심사별 줄 수 분포 — 거대한 App 클래스가 한눈에 보입니다.</p>
+<div class="card">
+  <div class="barwrap"><span class="lbl">BibleClipApp 클래스</span><span class="bar" style="width:70%"></span><span class="num">~2,600줄 (70%)</span></div>
+  <div class="barwrap"><span class="lbl">상수(자모·책이름 맵)</span><span class="bar" style="width:6.4%"></span><span class="num">~236줄</span></div>
+  <div class="barwrap"><span class="lbl">원어 데이터·사전</span><span class="bar" style="width:5.6%"></span><span class="num">~206줄</span></div>
+  <div class="barwrap"><span class="lbl">Formatter</span><span class="bar" style="width:4%"></span><span class="num">~146줄</span></div>
+  <div class="barwrap"><span class="lbl">업데이트 체커</span><span class="bar" style="width:3.6%"></span><span class="num">~134줄</span></div>
+  <div class="barwrap"><span class="lbl">Engine(구절 파서)</span><span class="bar" style="width:3.2%"></span><span class="num">~120줄</span></div>
+  <div class="barwrap"><span class="lbl">BibleDB</span><span class="bar" style="width:2.9%"></span><span class="num">~107줄</span></div>
+  <div class="barwrap"><span class="lbl">경로·환경 헬퍼</span><span class="bar" style="width:2%"></span><span class="num">~74줄</span></div>
+  <div class="barwrap"><span class="lbl">Hangul 조립기</span><span class="bar" style="width:1.5%"></span><span class="num">~55줄</span></div>
+  <div class="barwrap"><span class="lbl">Theme(팔레트)</span><span class="bar" style="width:1.2%"></span><span class="num">~45줄</span></div>
+  <div class="barwrap"><span class="lbl">텍스트 정제</span><span class="bar" style="width:0.8%"></span><span class="num">~31줄</span></div>
+  <div class="note" style="margin-bottom:0"><b>핵심:</b> 비-UI 로직(데이터·파서·업데이트·테마)은 이미 함수/클래스로 깔끔히 분리돼 있어
+    <b>그대로 잘라 옮기면</b> 됩니다. 진짜 작업은 2,600줄짜리 <code>BibleClipApp</code>를
+    <b>믹스인(mixin)</b>으로 쪼개는 것뿐입니다.</div>
+</div>
+
+<!-- ============ TARGET TREE ============ -->
+<h2><span class="n">3</span>목표 패키지 구조</h2>
+<p class="lead">엔트리포인트 <code>autobible.py</code>는 얇은 실행 슈팅으로 남기고, 실제 코드는 <code>bibleclip/</code> 패키지로.</p>
+<pre><span class="c"># 프로젝트 루트</span>
+autobible.py            <span class="c"># (유지) 3줄짜리 실행 슈팅 → from bibleclip.app import main</span>
+bibleclip/
+├─ __init__.py          <span class="c"># 패키지 + __version__ 노출</span>
+├─ __main__.py          <span class="c"># python -m bibleclip 진입점</span>
+├─ <span class="a">config.py</span>           <span class="c"># 플랫폼 플래그·폰트·GitHub 상수·경로 헬퍼      (~130줄)</span>
+├─ <span class="a">constants.py</span>        <span class="c"># 자모 매핑·한국어/영어 책 이름 맵              (~236줄)</span>
+├─ <span class="a">theme.py</span>            <span class="c"># LIGHT_THEME / DARK_THEME 팔레트              (~45줄)</span>
+├─ <span class="a">text_utils.py</span>       <span class="c"># clean_text·despace·trigrams·한글 조립기      (~90줄)</span>
+├─ <span class="a">update.py</span>           <span class="c"># 릴리스 체크·SSL·플랫폼 자산 선택             (~134줄)</span>
+│
+├─ data/
+│  ├─ __init__.py
+│  ├─ <span class="a">bible_db.py</span>       <span class="c"># BibleDB(+검색 인덱스)                        (~107줄)</span>
+│  └─ <span class="a">original_lang.py</span>  <span class="c"># BethlehemDB·Lexicon·파서·render_dict_html    (~206줄)</span>
+│
+├─ core/
+│  ├─ __init__.py
+│  ├─ <span class="a">engine.py</span>        <span class="c"># Engine 구절 참조 파서                        (~120줄)</span>
+│  └─ <span class="a">formatter.py</span>     <span class="c"># Formatter 출력 생성                          (~146줄)</span>
+│
+└─ ui/
+   ├─ __init__.py
+   ├─ <span class="a">app.py</span>           <span class="c"># BibleClipApp 본체 + 믹스인 조립 + main()     (~260줄)</span>
+   ├─ <span class="a">viewer.py</span>        <span class="c"># ViewerMixin — 본문/칩/드래그/스크롤/폰트/복사 (~520줄)</span>
+   ├─ <span class="a">settings.py</span>      <span class="c"># SettingsMixin — 설정 탭·출력순서·미리보기     (~200줄)</span>
+   ├─ <span class="a">lexicon.py</span>       <span class="c"># LexiconMixin — 원어 패널·호버·형태소·팝업     (~300줄)</span>
+   ├─ <span class="a">search.py</span>        <span class="c"># SearchMixin — #키워드 검색 UI                 (~90줄)</span>
+   ├─ <span class="a">monitor.py</span>       <span class="c"># MonitorMixin — 클립보드·로그·상태             (~150줄)</span>
+   ├─ <span class="a">theming.py</span>       <span class="c"># ThemeMixin — _apply_theme·스타일 적용         (~210줄)</span>
+   └─ <span class="a">updater_ui.py</span>    <span class="c"># UpdateMixin — 배너·다운로드·업데이터 스크립트 (~340줄)</span></pre>
+<div class="note ok" style="margin-bottom:0"><b>변하지 않는 것 (의도적):</b>
+  설정 파일명 <code>autobible_settings.json</code>, 데이터 폴더명 <code>bible_versions/</code>·<code>original_lang/</code>,
+  GitHub 저장소 <code>AutoBible</code>. 사용자 데이터·릴리스 호환을 위해 <b>그대로 둡니다.</b></div>
+
+<!-- ============ MIXIN STRATEGY ============ -->
+<h2><span class="n">4</span>거대 클래스 → 믹스인 분할</h2>
+<p class="lead">2,600줄 <code>BibleClipApp</code>를 관심사별 믹스인 7개로. <code>self.</code> 공유 상태는 그대로, 메서드만 파일 이동.</p>
+<div class="card">
+<pre><span class="c"># ui/app.py — 조립만 담당</span>
+<span class="d">from</span> bibleclip.ui.viewer    <span class="d">import</span> ViewerMixin
+<span class="d">from</span> bibleclip.ui.settings  <span class="d">import</span> SettingsMixin
+<span class="d">from</span> bibleclip.ui.lexicon   <span class="d">import</span> LexiconMixin
+<span class="d">from</span> bibleclip.ui.search    <span class="d">import</span> SearchMixin
+<span class="d">from</span> bibleclip.ui.monitor   <span class="d">import</span> MonitorMixin
+<span class="d">from</span> bibleclip.ui.theming   <span class="d">import</span> ThemeMixin
+<span class="d">from</span> bibleclip.ui.updater_ui <span class="d">import</span> UpdateMixin
+
+<span class="d">class</span> <span class="a">BibleClipApp</span>(ViewerMixin, SettingsMixin, LexiconMixin,
+                   SearchMixin, MonitorMixin, ThemeMixin, UpdateMixin):
+    <span class="d">def</span> <span class="g">__init__</span>(self, root):
+        ...  <span class="c"># 상태 초기화 + _build_ui() 호출 (믹스인 메서드들이 채워줌)</span></pre>
+  <p style="margin-bottom:0;color:var(--muted);font-size:14px">믹스인은 다중상속으로 한 클래스에 합쳐지므로 <code>self.viewer_text</code>,
+    <code>self.settings</code> 등 공유 상태 접근 방식이 <b>전혀 바뀌지 않습니다.</b> 순수한 "메서드 이사"입니다.</p>
+</div>
+
+<table>
+  <thead><tr><th>믹스인</th><th>책임</th><th class="mono">대표 메서드 (현재 줄)</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">ViewerMixin</td><td>본문 탭·버전 칩·드래그&amp;드롭·장 이동·스크롤 동기·폰트·절 복사</td>
+        <td class="mono">_build_viewer_tab(1434)·_load_chapter(2563)·_copy_verses_formatted(2821)·_on_viewer_yscroll(2719)</td></tr>
+    <tr><td class="mono">SettingsMixin</td><td>설정 탭·출력 버전 순서·미리보기</td>
+        <td class="mono">_build_settings_tab(1666)·_add_to_order(2183)·_update_preview(2261)</td></tr>
+    <tr><td class="mono">LexiconMixin</td><td>원어 패널·단어 클릭/호버·형태소·독립 사전 팝업</td>
+        <td class="mono">_render_lex_middle(1876)·_on_lex_hover(1957)·_open_lex_popup(2102)</td></tr>
+    <tr><td class="mono">SearchMixin</td><td><code>#키워드</code> 검색 입력·결과 렌더·클릭 복사</td>
+        <td class="mono">_run_search(2874)·_render_search_results(2889)·_copy_single_ref(2934)</td></tr>
+    <tr><td class="mono">MonitorMixin</td><td>클립보드 읽기/쓰기·모니터 루프·구절 처리·로그·상태</td>
+        <td class="mono">_monitor_loop(3033)·_process_clipboard(3044)·_append_log(3113)</td></tr>
+    <tr><td class="mono">ThemeMixin</td><td>다크모드 토글·테마 적용·위젯 스타일</td>
+        <td class="mono">_apply_theme(3158)·_style_button(3369)·_style_scrollbar(3375)</td></tr>
+    <tr><td class="mono">UpdateMixin</td><td>업데이트 배너·다운로드·.bat/.sh 업데이터 작성</td>
+        <td class="mono">_start_update(3481)·_write_updater_bat(3662)·_write_mac_updater_sh(3592)</td></tr>
+  </tbody>
+</table>
+
+<!-- ============ MAPPING ============ -->
+<h2><span class="n">5</span>이동 매핑 (현재 → 신규)</h2>
+<table>
+  <thead><tr><th>현재 줄 범위</th><th>내용</th><th>새 위치</th><th>분류</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">28–53</td><td>버전·플랫폼·폰트·GitHub 상수</td><td class="mono">config.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">59–133</td><td>경로·환경 헬퍼 (get_base_dir 등)</td><td class="mono">config.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">136–291</td><td>자모 매핑·책 이름 맵</td><td class="mono">constants.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">293–381</td><td>한글 조립기·텍스트 정제</td><td class="mono">text_utils.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">383–517</td><td>업데이트 체커 함수들</td><td class="mono">update.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">519–725</td><td>원어 DB·사전·파서·render_dict_html</td><td class="mono">data/original_lang.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">726–846</td><td>Engine 참조 파서</td><td class="mono">core/engine.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">848–955</td><td>BibleDB + 검색 인덱스</td><td class="mono">data/bible_db.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">956–1001</td><td>LIGHT/DARK_THEME</td><td class="mono">theme.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">1003–1149</td><td>Formatter</td><td class="mono">core/formatter.py</td><td><span class="tag keep">이동</span></td></tr>
+    <tr><td class="mono">1151–3751</td><td>BibleClipApp (거대 클래스)</td><td class="mono">ui/*.py (7 믹스인)</td><td><span class="tag split">분할</span></td></tr>
+    <tr><td class="mono">3757–끝</td><td>main()</td><td class="mono">ui/app.py</td><td><span class="tag keep">이동</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============ STEPS ============ -->
+<h2><span class="n">6</span>실행 단계 (검증 게이트 포함)</h2>
+<p class="lead">각 단계 끝에 <span class="gate">✓ 실행 확인</span> 게이트. 통과 못 하면 다음으로 넘어가지 않습니다.</p>
+<ul class="steps">
+  <li>
+    <span class="phase">Phase 0 · 안전망</span>
+    <h4>브랜치 + 베이스라인 확보</h4>
+    <p><code>git switch -c refactor/modularize</code> 로 작업 브랜치 생성. 현재 v1.5.0이 정상 실행되는지 한 번 띄워
+       기준점으로 삼습니다. (릴리스 태그는 건드리지 않음 → CI 자동 빌드 트리거 안 됨)</p>
+    <span class="gate">✓ v1.5.0 정상 실행 확인</span>
+  </li>
+  <li>
+    <span class="phase">Phase 1 · 잎부터 (의존성 없는 순수 모듈)</span>
+    <h4>config · constants · theme · text_utils 분리</h4>
+    <p>다른 코드에 의존하지 않는 "잎(leaf)" 모듈을 먼저 잘라냄. 원본 <code>autobible.py</code> 상단을
+       <code>from bibleclip.config import *</code> 등으로 교체하고 나머지는 그대로 둠.</p>
+    <span class="gate">✓ 실행 + 본문 표시 + 다크모드 토글 정상</span>
+  </li>
+  <li>
+    <span class="phase">Phase 2 · 데이터·코어 계층</span>
+    <h4>data/ · core/ (BibleDB·원어·Engine·Formatter)</h4>
+    <p>UI가 의존하는 백엔드 클래스 이동. import 한 줄만 바뀌고 호출부는 동일.
+       <code>resolve_data_dir</code> 경로 로직이 <code>config.py</code>로 옮겨졌으니 데이터 로딩을 반드시 재확인.</p>
+    <span class="gate">✓ 성경 로드 + 원어 패널 + #검색 정상</span>
+  </li>
+  <li>
+    <span class="phase">Phase 3 · UI 믹스인 분할 (핵심)</span>
+    <h4>ui/ 7개 믹스인 + app.py 조립</h4>
+    <p>한 번에 하나씩 — Theme → Monitor → Search → Settings → Lexicon → Viewer → Update 순(작은 것부터).
+       각 믹스인 추출 직후 실행해 해당 기능을 직접 눌러봄.</p>
+    <span class="gate">✓ 믹스인 1개 추출 = 실행 1회 (총 7회 검증)</span>
+  </li>
+  <li>
+    <span class="phase">Phase 4 · 엔트리포인트 정리</span>
+    <h4>autobible.py를 슈팅으로, __main__.py 추가</h4>
+    <p><code>autobible.py</code> 내용을 <code>from bibleclip.ui.app import main; main()</code> 3줄로 축소.
+       <b>PyInstaller spec / CI / build_mac.sh는 여전히 <code>autobible.py</code>를 가리키므로 그대로 동작</b> (엔트리 이름 불변).</p>
+    <span class="gate">✓ python autobible.py + python -m bibleclip 둘 다 실행</span>
+  </li>
+  <li>
+    <span class="phase">Phase 5 · 빌드 검증</span>
+    <h4>로컬 PyInstaller 빌드 + 데이터 동봉 확인</h4>
+    <p>패키지 분할로 PyInstaller가 서브모듈을 놓치지 않는지 확인. 필요 시 spec에
+       <code>hiddenimports=['bibleclip.ui.viewer', ...]</code> 추가 또는 <code>--collect-submodules bibleclip</code>.</p>
+    <span class="gate">✓ dist 빌드 실행 + 자동 업데이트 흐름 점검</span>
+  </li>
+  <li>
+    <span class="phase">Phase 6 · 릴리스</span>
+    <h4>v1.6.0 태그 → CI 자동 빌드</h4>
+    <p>CHANGELOG에 "내부 구조 모듈화(기능 동일)" 기록 후 <code>__version__=1.6.0</code> 범프, 태그 푸시.
+       Windows/macOS zip·dmg 생성 확인. 기존 사용자는 인앱 업데이트로 그대로 받음.</p>
+    <span class="gate">✓ CI 3 잡 green + 자산 3개 확인</span>
+  </li>
+</ul>
+
+<!-- ============ RISKS ============ -->
+<h2><span class="n">7</span>위험 요소 &amp; 대비</h2>
+<div class="card">
+  <table style="margin:0">
+    <thead><tr><th>위험</th><th>영향</th><th>대비</th></tr></thead>
+    <tbody>
+      <tr><td>PyInstaller가 동적 서브모듈 누락</td><td>빌드는 되나 실행 시 ImportError</td>
+          <td><code>--collect-submodules bibleclip</code> 또는 spec <code>hiddenimports</code></td></tr>
+      <tr><td><code>resolve_data_dir</code>의 <code>__file__</code> 기준 경로 변동</td><td>성경 DB 못 찾음</td>
+          <td>config로 옮길 때 base_dir 계산을 패키지 위치 기준으로 검증 (Phase 2 게이트)</td></tr>
+      <tr><td>순환 import (ui ↔ core)</td><td>import 에러</td>
+          <td>의존 방향 단방향 고정: <code>ui → core → data → config</code>. 역참조 금지</td></tr>
+      <tr><td>믹스인 간 메서드 이름 충돌</td><td>오버라이드 사고</td>
+          <td>모두 <code>self._</code> 단일 네임스페이스 → 이름 그대로 유지하면 충돌 없음(이미 유일)</td></tr>
+      <tr><td>settings 파일명 변경 실수</td><td>사용자 설정 초기화</td>
+          <td><code>autobible_settings.json</code> 문자열 절대 변경 금지 (config 상수화)</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="note danger" style="margin-bottom:0"><b>롤백:</b> 모든 작업은 <code>refactor/modularize</code> 브랜치에서.
+  문제 시 <code>git switch main</code> 한 번으로 즉시 원복. main은 항상 동작하는 v1.5.0 유지.</div>
+
+<!-- ============ AFTER ============ -->
+<h2><span class="n">8</span>완료 후 체감</h2>
+<div class="card">
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">예시: "검색 임계값 조정"</h3>
+      <p style="margin:0"><span style="color:var(--danger);font-weight:700">전</span> — autobible.py 3,764줄 전체 로드<br>
+         <span style="color:var(--ok);font-weight:700">후</span> — data/bible_db.py 107줄만 로드</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">예시: "배너 색 변경"</h3>
+      <p style="margin:0"><span style="color:var(--danger);font-weight:700">전</span> — 전체에서 테마 키 풀스캔<br>
+         <span style="color:var(--ok);font-weight:700">후</span> — theme.py 45줄 + updater_ui.py만</p>
+    </div>
+  </div>
+  <p style="margin-bottom:0;text-align:center;color:var(--accent);font-weight:700;font-size:16px;margin-top:18px">
+    작업당 평균 읽기량 ≈ 3,764줄 → 100~500줄 (약 90% 절감)</p>
+</div>
+
+<footer>BibleClip 모듈화 파이프라인 · v1.5.0 기준 작성 · 기능 변경 없음, 구조만 분리</footer>
+</div>
+</body>
+</html>

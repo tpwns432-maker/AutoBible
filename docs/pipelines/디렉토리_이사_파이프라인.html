@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BibleClip 디렉토리 이사 파이프라인</title>
+<style>
+  :root{
+    --accent:#6D4DFF; --accent2:#9A86FF; --ink:#1c1b2e; --muted:#6b6880;
+    --bg:#f7f6fb; --card:#ffffff; --line:#e7e4f2; --code:#f3f1fb;
+    --ok:#1f9d6b; --warn:#d98a00; --danger:#d6455d;
+    --mono:'D2Coding','Consolas','SFMono-Regular',Menlo,monospace;
+    --sans:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px 120px;}
+  header{background:linear-gradient(135deg,#5a3df0 0%,#9A86FF 100%);color:#fff;padding:56px 24px 48px;margin-bottom:40px;}
+  header .inner{max-width:1040px;margin:0 auto;}
+  header .kicker{font-size:13px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;font-weight:600;}
+  header h1{margin:.3em 0 .2em;font-size:34px;font-weight:800;letter-spacing:-.02em;}
+  header p{margin:0;font-size:17px;opacity:.92;max-width:700px;}
+  header .meta{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;}
+  header .pill{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);padding:6px 13px;border-radius:999px;font-size:13px;font-weight:600;}
+  h2{font-size:23px;font-weight:800;margin:52px 0 8px;letter-spacing:-.01em;display:flex;align-items:center;gap:12px;}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:var(--accent);color:#fff;border-radius:10px;font-size:16px;flex:0 0 auto;}
+  h3{font-size:17px;font-weight:700;margin:30px 0 6px;}
+  .lead{color:var(--muted);font-size:15.5px;margin:0 0 8px;}
+  p{margin:10px 0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 26px;margin:18px 0;box-shadow:0 1px 2px rgba(40,30,90,.04);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}.wrap{padding:0 16px 80px}}
+  code{font-family:var(--mono);background:var(--code);padding:2px 6px;border-radius:5px;font-size:.9em;color:#4a32c9;}
+  pre{font-family:var(--mono);background:#1c1b2e;color:#e8e6f5;padding:20px 22px;border-radius:14px;overflow-x:auto;font-size:13.5px;line-height:1.6;}
+  pre .c{color:#7d78a8;} pre .a{color:#b9a8ff;} pre .g{color:#7fe0b0;} pre .y{color:#ffd479;} pre .d{color:#ff8da0;} pre .x{color:#ff7a7a;}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:var(--code);font-weight:700;font-size:13px;color:#4a32c9;}
+  tr:last-child td{border-bottom:none;}
+  td.mono,th.mono{font-family:var(--mono);font-size:13px;}
+  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
+  .tag.move{background:#eef1ff;color:var(--accent);} .tag.keep{background:#eafaf2;color:var(--ok);}
+  .tag.del{background:#fdeaed;color:var(--danger);} .tag.ren{background:#fff4e1;color:var(--warn);}
+  .note{border-left:4px solid var(--accent);background:#f4f1ff;padding:14px 18px;border-radius:0 12px 12px 0;margin:16px 0;}
+  .note.warn{border-color:var(--warn);background:#fff8ec;}
+  .note.danger{border-color:var(--danger);background:#fdeef0;}
+  .note.ok{border-color:var(--ok);background:#edf9f2;}
+  .note b{color:var(--ink);}
+  ul.steps{list-style:none;padding:0;margin:0;counter-reset:s;}
+  ul.steps>li{position:relative;padding:4px 0 22px 50px;border-left:2px solid var(--line);margin-left:16px;}
+  ul.steps>li:last-child{border-left:2px solid transparent;}
+  ul.steps>li::before{counter-increment:s;content:counter(s);position:absolute;left:-17px;top:0;width:32px;height:32px;background:#fff;border:2px solid var(--accent);color:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  ul.steps>li h4{margin:2px 0 6px;font-size:16px;}
+  .gate{display:inline-block;background:#edf9f2;color:var(--ok);border:1px solid #bfe8d4;padding:3px 11px;border-radius:8px;font-size:12.5px;font-weight:700;margin-top:6px;}
+  .phase{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:12px 0 0;align-items:center;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  footer{color:var(--muted);font-size:13px;text-align:center;margin-top:60px;}
+  .col-before{border-top:3px solid var(--danger);}
+  .col-after{border-top:3px solid var(--ok);}
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <div class="kicker">BibleClip · Repository Layout</div>
+    <h1>디렉토리 이사 파이프라인</h1>
+    <p>이름은 BibleClip이 됐는데 폴더는 아직 AutoBible 시절 그대로입니다. 루트에 쌓인 19MB 잡동사니를 치우고,
+       코드·데이터·빌드·문서를 제자리로 옮깁니다. <b>GitHub 저장소 이름(AutoBible)·사용자 데이터는 그대로 유지.</b></p>
+    <div class="meta">
+      <span class="pill">루트 파일 20+ → 정돈</span>
+      <span class="pill">삭제 대상 ≈ 19.5 MB</span>
+      <span class="pill">빌드 참조 3곳 동기화</span>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+
+<!-- ====== CONSTRAINTS FIRST ====== -->
+<h2><span class="n">0</span>먼저: 절대 건드리면 안 되는 것</h2>
+<p class="lead">이사 중 이 4가지가 깨지면 사용자 데이터 손실 또는 업데이트 단절. 모든 단계에서 사수합니다.</p>
+<div class="card">
+  <table style="margin:0">
+    <thead><tr><th>고정 대상</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">autobible_settings.json</td><td>사용자 설정 파일명. 바꾸면 모두 초기화됨 (앱이 이 이름으로 읽고 씀)</td></tr>
+      <tr><td class="mono">bible_versions/ · original_lang/</td><td>런타임 데이터 폴더명. 앱이 이 이름으로 탐색 → 이름 변경 금지</td></tr>
+      <tr><td class="mono">GitHub repo "AutoBible"</td><td>릴리스 URL·자동 업데이트 엔드포인트. 저장소는 그대로 둠</td></tr>
+      <tr><td class="mono">autobible.py (엔트리 이름)</td><td>spec·CI·build_mac.sh가 이 파일명으로 빌드. 이름 유지(내용만 슈팅화 가능)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ====== BEFORE / AFTER ====== -->
+<h2><span class="n">1</span>지금 vs 이사 후</h2>
+<div class="grid2">
+  <div class="card col-before" style="margin-top:0">
+    <h3 style="margin-top:0;color:var(--danger)">▼ 지금 (루트가 잡동사니)</h3>
+<pre><span class="x">autobible.py</span>                 <span class="c">소스 (3,764줄)</span>
+<span class="x">AutoBible.spec</span>               <span class="c">옛 이름</span>
+<span class="x">AutoBible-mac-source.zip</span>     <span class="c">19 MB 🗑</span>
+<span class="x">image.jpg</span>                    <span class="c">162 KB 미사용 🗑</span>
+<span class="x">BethlehemWin/</span>                <span class="c">옛 원어폴더 🗑</span>
+<span class="x">BibleClip-redesign-...html</span>   <span class="c">친구 리포트</span>
+<span class="x">모듈화_파이프라인.html</span>        <span class="c">방금 생성</span>
+<span class="x">디렉토리_이사_...html</span>         <span class="c">이 문서</span>
+<span class="x">update_check.log</span>             <span class="c">런타임 로그</span>
+CHANGELOG.md  BUILD_MAC.md
+build_mac.sh
+bible_versions/  original_lang/
+icon.ico  icon.png
+.github/  .git/  dist/  build/</pre>
+  </div>
+  <div class="card col-after" style="margin-top:0">
+    <h3 style="margin-top:0;color:var(--ok)">▲ 이사 후 (역할별 정리)</h3>
+<pre><span class="g">autobible.py</span>                 <span class="c">유지 (엔트리)</span>
+<span class="g">README.md</span>                    <span class="c">신규</span>
+<span class="g">bibleclip/</span>                   <span class="c">패키지(모듈화)</span>
+<span class="g">bible_versions/</span>              <span class="c">유지 (런타임)</span>
+<span class="g">original_lang/</span>               <span class="c">유지 (런타임)</span>
+<span class="g">assets/icons/</span>                <span class="c">icon.ico/png/icns</span>
+<span class="g">build/</span>
+  ├─ BibleClip.spec           <span class="c">이름변경</span>
+  └─ build_mac.sh
+<span class="g">docs/</span>
+  ├─ CHANGELOG.md
+  ├─ BUILD_MAC.md
+  ├─ redesign-report.html
+  └─ pipelines/*.html
+.github/  .git/  .gitignore
+<span class="c">(gitignore됨) dist/ build_out/ *.log
+            autobible_settings.json</span></pre>
+  </div>
+</div>
+<div class="note"><b>설계 원칙:</b> 런타임이 의존하는 <code>bible_versions/</code>·<code>original_lang/</code>·엔트리 <code>autobible.py</code>는
+  <b>루트에 그대로</b> 둡니다(앱·CI 계약). 옮기는 건 사람만 보는 것들(문서·빌드스크립트·아이콘 원본)과 잡동사니 정리뿐 → 위험 최소화.</p></div>
+
+<!-- ====== CLEANUP ====== -->
+<h2><span class="n">2</span>먼저 비우기 (삭제 ≈ 19.5 MB)</h2>
+<table>
+  <thead><tr><th>대상</th><th>크기</th><th>판단</th><th>근거</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">AutoBible-mac-source.zip</td><td>19 MB</td><td><span class="tag del">삭제</span></td>
+        <td>옛 소스 묶음. 이미 <code>.gitignore</code>됨. git 추적 안 됨 → 그냥 삭제</td></tr>
+    <tr><td class="mono">BethlehemWin/</td><td>—</td><td><span class="tag del">삭제</span></td>
+        <td>v1.1.6에서 <code>original_lang/</code>으로 대체됨. 레거시 인식만 남아있을 뿐 불필요</td></tr>
+    <tr><td class="mono">image.jpg</td><td>162 KB</td><td><span class="tag del">삭제</span></td>
+        <td>어디서도 참조 안 함(아이콘은 icon.ico/png). 확인 후 삭제</td></tr>
+    <tr><td class="mono">update_check.log</td><td>60 B</td><td><span class="tag del">삭제</span></td>
+        <td>런타임 진단 로그. gitignore됨. 재생성됨 → 삭제 안전</td></tr>
+    <tr><td class="mono">__pycache__/ · build/ · dist/</td><td>—</td><td><span class="tag keep">유지(무시)</span></td>
+        <td>빌드 산출물. gitignore됨. 손대지 않음</td></tr>
+    <tr><td class="mono">autobible_settings.json</td><td>801 B</td><td><span class="tag keep">유지</span></td>
+        <td>사용자 설정. 루트에서 앱이 읽고 씀 → 절대 이동·삭제 금지</td></tr>
+  </tbody>
+</table>
+<div class="note warn" style="margin-bottom:0"><b>BethlehemWin 삭제 전 확인:</b> <code>original_lang/</code>에 3개 파일
+  (<code>개역한글S.sdb · HebGrkKo.dct · HebGrkEn.dct</code>)이 모두 있는지 먼저 검증. 있으면 BethlehemWin은 순수 잉여.</div>
+
+<!-- ====== MOVE TABLE ====== -->
+<h2><span class="n">3</span>이동·이름변경 매핑</h2>
+<table>
+  <thead><tr><th>현재</th><th>→ 목적지</th><th>분류</th><th>주의</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">AutoBible.spec</td><td class="mono">build/BibleClip.spec</td><td><span class="tag ren">이름변경+이동</span></td><td>내부 <code>name='AutoBible'</code>→<code>BibleClip</code>, 경로 보정</td></tr>
+    <tr><td class="mono">build_mac.sh</td><td class="mono">build/build_mac.sh</td><td><span class="tag move">이동</span></td><td><code>cd "$(dirname "$0")/.."</code> 로 루트 기준 고정</td></tr>
+    <tr><td class="mono">CHANGELOG.md</td><td class="mono">docs/CHANGELOG.md</td><td><span class="tag move">이동</span></td><td>버전 범프 시 경로만 바뀜</td></tr>
+    <tr><td class="mono">BUILD_MAC.md</td><td class="mono">docs/BUILD_MAC.md</td><td><span class="tag move">이동</span></td><td>본문 경로 안내 갱신</td></tr>
+    <tr><td class="mono">BibleClip-redesign-full-report.html</td><td class="mono">docs/redesign-report.html</td><td><span class="tag ren">이름변경+이동</span></td><td>참고 자료</td></tr>
+    <tr><td class="mono">모듈화_파이프라인.html</td><td class="mono">docs/pipelines/</td><td><span class="tag move">이동</span></td><td>이 계획 문서들</td></tr>
+    <tr><td class="mono">디렉토리_이사_파이프라인.html</td><td class="mono">docs/pipelines/</td><td><span class="tag move">이동</span></td><td>—</td></tr>
+    <tr><td class="mono">icon.ico · icon.png</td><td class="mono">assets/icons/</td><td><span class="tag move">이동 ⚠</span></td><td><b>CI·spec 참조 경로 동시 수정 필수</b> (아래 4장)</td></tr>
+    <tr><td class="mono">autobible.py</td><td class="mono">(루트 유지)</td><td><span class="tag keep">유지</span></td><td>모듈화 후 3줄 슈팅으로 축소만</td></tr>
+    <tr><td class="mono">bible_versions/ · original_lang/</td><td class="mono">(루트 유지)</td><td><span class="tag keep">유지</span></td><td>런타임 탐색 경로 — 이동 금지</td></tr>
+  </tbody>
+</table>
+<div class="note danger" style="margin-bottom:0"><b>icon 이동은 선택사항:</b> 아이콘을 <code>assets/icons/</code>로 옮기면
+  CI(<code>--icon=icon.ico</code>, Copy-Item)·spec·build_mac.sh 3곳을 같이 고쳐야 합니다.
+  <b>위험을 더 줄이려면 icon 파일은 루트에 그대로 두는 것을 권장</b>(CI 무수정). 나머지 정리만으로도 루트는 충분히 깔끔해집니다.</div>
+
+<!-- ====== REFERENCE SYNC ====== -->
+<h2><span class="n">4</span>같이 고쳐야 할 빌드 참조</h2>
+<p class="lead">파일을 옮기면 이 참조들이 깨집니다. 이동과 <b>한 커밋</b>에서 함께 수정해야 CI가 안 끊깁니다.</p>
+<div class="card">
+  <table style="margin:0">
+    <thead><tr><th>파일</th><th>현재 참조</th><th>이동 시 조치</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">.github/workflows/build.yml</td>
+          <td class="mono">--icon=icon.ico / icon.icns<br>Copy-Item bible_versions/...<br>--name BibleClip autobible.py</td>
+          <td><code>autobible.py</code>·데이터 폴더는 루트 유지 → <b>무수정</b>. icon만 옮기면 icon 경로 갱신</td></tr>
+      <tr><td class="mono">build/BibleClip.spec</td>
+          <td class="mono">['autobible.py'] / name='AutoBible'</td>
+          <td>name→<code>BibleClip</code>; spec를 build/로 옮기면 <code>pathex=['..']</code> 또는 루트에서 실행</td></tr>
+      <tr><td class="mono">build/build_mac.sh</td>
+          <td class="mono">cd "$(dirname "$0")"<br>cp bible_versions/* ...</td>
+          <td>build/ 하위로 가면 <code>cd "$(dirname "$0")/.."</code> 로 루트 이동 후 기존 상대경로 유지</td></tr>
+      <tr><td class="mono">.gitignore</td>
+          <td class="mono">개별 항목</td>
+          <td>새 폴더(<code>docs/pipelines/</code> 등) 추적 여부 정리, 삭제물 항목 제거</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="note ok" style="margin-bottom:0"><b>핵심 보호 장치:</b> 가장 깨지기 쉬운
+  <code>autobible.py</code>·<code>bible_versions/</code>·<code>original_lang/</code>를 <b>루트에 고정</b>했기 때문에,
+  실제로 손대는 빌드 참조는 (icon을 안 옮기면) <b>spec 이름변경 한 곳</b>뿐입니다.</div>
+
+<!-- ====== STEPS ====== -->
+<h2><span class="n">5</span>실행 단계</h2>
+<p class="lead">git 이력 보존을 위해 <code>git mv</code> 사용. 단계마다 검증 게이트.</p>
+<ul class="steps">
+  <li>
+    <span class="phase">Phase 0 · 안전망</span>
+    <h4>브랜치 + 데이터 무결성 확인</h4>
+    <p><code>git switch -c chore/repo-reorg</code>. <code>original_lang/</code> 3개 파일 존재 확인(BethlehemWin 삭제 전제).
+       현재 v1.5.0 정상 실행을 기준점으로 기록.</p>
+    <span class="gate">✓ 앱 실행 + 원어 패널 동작 확인</span>
+  </li>
+  <li>
+    <span class="phase">Phase 1 · 비우기</span>
+    <h4>잡동사니 삭제</h4>
+    <p><code>AutoBible-mac-source.zip</code>·<code>BethlehemWin/</code>·<code>image.jpg</code>·<code>update_check.log</code> 삭제
+       (대부분 gitignore라 작업트리에서만 제거). 디스크 19.5MB 회수.</p>
+    <span class="gate">✓ git status 깨끗 + 앱 여전히 실행</span>
+  </li>
+  <li>
+    <span class="phase">Phase 2 · 폴더 골격</span>
+    <h4>docs/ · build/ · assets/ 생성 후 git mv</h4>
+    <p>문서·빌드스크립트·(선택)아이콘을 <code>git mv</code>로 이동(이력 보존).
+       <code>bible_versions/</code>·<code>original_lang/</code>·<code>autobible.py</code>는 건드리지 않음.</p>
+    <span class="gate">✓ git log --follow 로 이력 추적 확인</span>
+  </li>
+  <li>
+    <span class="phase">Phase 3 · 참조 동기화</span>
+    <h4>spec 이름변경 + (필요시) 경로 갱신</h4>
+    <p><code>AutoBible.spec</code>→<code>build/BibleClip.spec</code>, 내부 <code>name</code> 수정.
+       build_mac.sh의 <code>cd</code> 보정. icon을 옮겼다면 CI·spec·sh의 icon 경로 일괄 수정.</p>
+    <span class="gate">✓ 로컬 PyInstaller 빌드 성공</span>
+  </li>
+  <li>
+    <span class="phase">Phase 4 · 문서 갱신</span>
+    <h4>README 작성 + 경로 안내 수정</h4>
+    <p>루트에 <code>README.md</code> 신설(빌드/실행/구조 요약). BUILD_MAC.md의 경로 참조를 새 위치로.
+       CHANGELOG에 "저장소 구조 정리" 기록.</p>
+    <span class="gate">✓ 문서 링크·경로 유효성 확인</span>
+  </li>
+  <li>
+    <span class="phase">Phase 5 · CI 검증</span>
+    <h4>main 머지 → 다음 태그에서 빌드 확인</h4>
+    <p>구조 변경은 기능 무관 → 단독 커밋으로 머지. 다음 버전 태그 푸시 시 Windows/macOS 빌드가
+       새 경로에서도 green인지 확인.</p>
+    <span class="gate">✓ CI 3 잡 green + 자산 3개</span>
+  </li>
+</ul>
+
+<!-- ====== ORDER WITH MODULARIZATION ====== -->
+<h2><span class="n">6</span>모듈화와의 순서</h2>
+<div class="card">
+  <p style="margin-top:0">두 작업은 독립적이지만, <b>이사 → 모듈화 순서</b>를 권장합니다.</p>
+  <table style="margin:0">
+    <thead><tr><th>순서</th><th>작업</th><th>이유</th></tr></thead>
+    <tbody>
+      <tr><td><b>1차</b></td><td>디렉토리 이사 (이 문서)</td><td>잡동사니 먼저 비우면 모듈화 시 탐색이 깔끔. 위험 낮고 빠름</td></tr>
+      <tr><td><b>2차</b></td><td>코드 모듈화 (별도 문서)</td><td>정리된 루트 위에 <code>bibleclip/</code> 패키지 생성 → 충돌 없음</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-bottom:0;color:var(--muted);font-size:14px">두 작업 모두 <code>autobible.py</code>를 루트 엔트리로 유지하므로 CI·릴리스 파이프라인은
+    내내 끊기지 않습니다. 각각 별도 브랜치·별도 버전으로 진행 가능.</p>
+</div>
+
+<footer>BibleClip 디렉토리 이사 파이프라인 · v1.5.0 기준 · GitHub 저장소·사용자 데이터 불변</footer>
+</div>
+</body>
+</html>

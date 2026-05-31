@@ -99,7 +99,10 @@ def system_env():
     return env
 
 BASE_DIR = get_base_dir()
-SETTINGS_FILE = "autobible_settings.json"
+SETTINGS_FILE = "bibleclip_settings.json"
+# Pre-1.6 settings filename. Read once (and only as a fallback) so existing
+# users keep their version order, last position, theme, window size, etc.
+LEGACY_SETTINGS_FILE = "autobible_settings.json"
 BIBLE_DIR = "bible_versions"
 
 
@@ -1311,6 +1314,13 @@ class BibleClipApp:
 
     def _load_settings(self):
         path = os.path.join(BASE_DIR, SETTINGS_FILE)
+        # One-time migration: if the new file doesn't exist yet but the legacy
+        # autobible_settings.json does, read from it. The next _save_settings
+        # writes the new file; the legacy file is left untouched (rollback-safe).
+        if not os.path.exists(path):
+            legacy = os.path.join(BASE_DIR, LEGACY_SETTINGS_FILE)
+            if os.path.exists(legacy):
+                path = legacy
         if os.path.exists(path):
             try:
                 with open(path, 'r', encoding='utf-8') as f:
