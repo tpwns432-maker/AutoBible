@@ -4,6 +4,16 @@ AutoBible의 버전별 변경 내용입니다. 최신 버전이 위에 옵니다
 
 ---
 
+## v1.5.1
+- 내부 구조 대규모 모듈화 (기능 100% 동일, 동작 변경 없음)
+  - 단일 파일 `autobible.py`(3,764줄)를 `bibleclip/` 패키지로 분리
+    (config·constants·theme·text_utils·update / data·core / UI 믹스인 10개)
+  - 진입점을 `bibleclip_app.py`로 정리(`python -m bibleclip`도 지원), `autobible` 흔적 제거
+  - 설정 파일명 `autobible_settings.json` → `bibleclip_settings.json`
+    (기존 설정은 최초 실행 시 자동 승계 — 무손실, 옛 파일 보존으로 롤백 안전)
+  - 저장소 정리: 잡파일 삭제(약 19.5MB), 문서→`docs/`, 빌드 스크립트→`packaging/`
+  - GitHub 저장소명(AutoBible)·자동 업데이트 동작은 그대로
+
 ## v1.5.0
 - 디자인 리프레시 (1단계: 현재 구조 유지, 기능 동일)
   - 보라/인디고 계열로 라이트·다크 팔레트 현대화, 단일 강조색 통일
