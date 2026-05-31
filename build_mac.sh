@@ -23,13 +23,18 @@ echo "==> Installing PyInstaller (in current Python environment)"
 echo "==> Cleaning previous build output"
 rm -rf build dist *.spec
 
-# Use icon.icns if present; PyInstaller on macOS needs .icns (not .ico).
+# PyInstaller on macOS needs .icns (not .ico). Generate it from icon.png if
+# only the PNG is present (sips ships with macOS).
+if [ ! -f "icon.icns" ] && [ -f "icon.png" ]; then
+  echo "==> Generating icon.icns from icon.png"
+  sips -s format icns icon.png --out icon.icns || echo "  (icns conversion failed)"
+fi
 ICON_ARG=""
 if [ -f "icon.icns" ]; then
   ICON_ARG="--icon=icon.icns"
   echo "==> Using icon.icns"
 else
-  echo "==> No icon.icns found - building without a custom icon"
+  echo "==> No icon.icns - building without a custom icon"
 fi
 
 echo "==> Building AutoBible.app with PyInstaller"

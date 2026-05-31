@@ -10,6 +10,7 @@ dist/
 
 # User runtime data (created at first launch)
 autobible_settings.json
+*.log
 
 # Editor / OS
 .claude/
@@ -23,6 +24,7 @@ Thumbs.db
 image.jpg
 사용법.txt
 *.png
+!icon.png
 
 # Original-language data: track only the 3 files used (for CI builds);
 # ignore the rest of the folder and the full legacy archive.

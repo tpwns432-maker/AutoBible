@@ -19,8 +19,9 @@ import tempfile
 import subprocess
 import datetime
 import webbrowser
+import shlex
 
-__version__ = "1.1.8"
+__version__ = "1.2.0"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -1002,6 +1003,11 @@ class AutoBibleApp:
         'skip_update_version': '',
         'dark_mode': False,
         'geometry': '1100x780',
+        'last_book_num': None,           # remember last viewed book/chapter
+        'last_chapter': None,
+        'viewer_hsash': [],              # horizontal 3-panel sash x positions
+        'viewer_vsash': None,            # vertical (panels/log) sash y position
+        'recent_refs': [],               # recent caught references (most-recent first)
     }
 
     def __init__(self, root):
@@ -1024,6 +1030,9 @@ class AutoBibleApp:
         self.settings = dict(self.DEFAULT_SETTINGS)
         self._sync_lock = False        # viewer ↔ middle scroll sync guard
         self._sync_pending = False     # debounce pending
+        self._tip = None               # hover tooltip window
+        self._tip_after = None         # scheduled tooltip callback id
+        self._tip_word = None          # (code, verse) under the cursor
 
         # Load databases
         self._load_databases()
@@ -1041,12 +1050,15 @@ class AutoBibleApp:
         self._build_ui()
         self._apply_theme()
 
-        # Initial viewer load
+        # Initial viewer load — restore last position if available
         if self.bible_dbs:
-            self._on_book_changed(None)
+            self._restore_last_position()
 
         # Update preview
         self._update_preview()
+
+        # Restore panel split positions once the layout is realized
+        self.root.after(120, self._restore_sash_positions)
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -1385,6 +1397,8 @@ class AutoBibleApp:
         self.lex_mid_text.tag_bind('lex_word', '<Leave>',
                                     lambda e: self.lex_mid_text.configure(cursor=''))
         self.lex_mid_text.bind('<Button-1>', self._on_lex_word_click)
+        self.lex_mid_text.bind('<Motion>', self._on_lex_hover)
+        self.lex_mid_text.bind('<Leave>', self._on_lex_hover_leave)
 
         # Panel 3: dictionary entry
         rg = tk.Frame(hpw)
@@ -1409,9 +1423,20 @@ class AutoBibleApp:
         vpw.add(log_frame, minsize=80, stretch="never")
         self.log_frame = log_frame
 
-        log_lbl = tk.Label(log_frame, text="활동 로그", font=(UI_FONT, 9, 'bold'))
-        log_lbl.pack(anchor=tk.W, padx=8, pady=(4, 2))
+        log_header = tk.Frame(log_frame)
+        log_header.pack(fill=tk.X, padx=8, pady=(4, 2))
+        self.log_header = log_header
+        log_lbl = tk.Label(log_header, text="활동 로그", font=(UI_FONT, 9, 'bold'))
+        log_lbl.pack(side=tk.LEFT)
         self._log_label = log_lbl
+        self.recent_label = tk.Label(log_header, text="최근 조회:", font=(UI_FONT, 9))
+        self.recent_label.pack(side=tk.LEFT, padx=(16, 4))
+        self.recent_var = tk.StringVar()
+        self.recent_combo = ttk.Combobox(log_header, textvariable=self.recent_var,
+                                          state='readonly', width=18)
+        self.recent_combo.pack(side=tk.LEFT)
+        self.recent_combo.bind('<<ComboboxSelected>>', self._on_recent_selected)
+        self._refresh_recent_combo()
 
         log_inner = tk.Frame(log_frame)
         log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
@@ -1670,32 +1695,163 @@ class AutoBibleApp:
 
     def _on_lex_word_click(self, event):
         idx = self.lex_mid_text.index(f"@{event.x},{event.y}")
+        code = verse = None
         for tag in self.lex_mid_text.tag_names(idx):
             if tag.startswith('sw_'):
-                self._show_lex_entry(tag[3:])
-                return
+                code = tag[3:]
+            elif tag.startswith('vb_'):
+                try:
+                    verse = int(tag[3:])
+                except ValueError:
+                    pass
+        if code:
+            self._hide_tip()
+            self._show_lex_entry(code, verse)
+
+    # ---- Hover preview ----
+
+    def _on_lex_hover(self, event):
+        idx = self.lex_mid_text.index(f"@{event.x},{event.y}")
+        code = verse = None
+        for tag in self.lex_mid_text.tag_names(idx):
+            if tag.startswith('sw_'):
+                code = tag[3:]
+            elif tag.startswith('vb_'):
+                try:
+                    verse = int(tag[3:])
+                except ValueError:
+                    pass
+        if code is None:
+            self._tip_word = None
+            self._hide_tip()
+            return
+        key = (code, verse)
+        if key == self._tip_word:
+            return  # already scheduled/shown for this word
+        self._tip_word = key
+        self._hide_tip()
+        x, y = event.x_root + 16, event.y_root + 14
+        self._tip_after = self.root.after(
+            450, lambda c=code, v=verse, px=x, py=y: self._show_tip(c, v, px, py))
+
+    def _on_lex_hover_leave(self, event):
+        self._tip_word = None
+        self._hide_tip()
+
+    def _hover_summary(self, code, verse):
+        lines = []
+        if (self.bethlehem_wonjun and verse
+                and getattr(self, '_lex_current_book', None)):
+            try:
+                rows = self.bethlehem_wonjun.get_chapter_verses(
+                    self._lex_current_book, self._lex_current_chapter)
+                bt = next((t for vn, t in rows if vn == verse), None)
+            except Exception:
+                bt = None
+            if bt:
+                for w in parse_wonjun_verse(bt):
+                    if w['code'] == code:
+                        s = w['lemma']
+                        if w['translit']:
+                            s += f" ({w['translit']})"
+                        if w['gloss'] and w['gloss'] != '_':
+                            s += f" — {w['gloss']}"
+                        lines.append(s)
+                        if w['pos']:
+                            lines.append(w['pos'])
+                        break
+        if not lines:
+            lex = self.lexicon_ko or self.lexicon_en
+            entry = lex.lookup(code) if lex else None
+            if entry:
+                txt = re.sub(r'<[^>]+>', '', entry).replace('^', ' ')
+                txt = re.sub(r'\s+', ' ', txt).strip()
+                if txt:
+                    lines.append(txt[:90] + ('…' if len(txt) > 90 else ''))
+        head = f"[{code}]"
+        return head + ('\n' + '\n'.join(lines) if lines else '')
+
+    def _show_tip(self, code, verse, x, y):
+        text = self._hover_summary(code, verse)
+        if not text:
+            return
+        self._hide_tip()
+        t = getattr(self, 'theme', LIGHT_THEME)
+        tip = tk.Toplevel(self.root)
+        tip.wm_overrideredirect(True)
+        try:
+            tip.wm_attributes('-topmost', True)
+        except Exception:
+            pass
+        tip.wm_geometry(f"+{x}+{y}")
+        lbl = tk.Label(tip, text=text, justify=tk.LEFT, font=(UI_FONT, 9),
+                       bg=t['preview_bg'], fg=t['preview_fg'],
+                       relief=tk.SOLID, borderwidth=1, padx=8, pady=5,
+                       wraplength=320)
+        lbl.pack()
+        self._tip = tip
+
+    def _hide_tip(self):
+        if self._tip_after:
+            try:
+                self.root.after_cancel(self._tip_after)
+            except Exception:
+                pass
+            self._tip_after = None
+        if self._tip:
+            try:
+                self._tip.destroy()
+            except Exception:
+                pass
+            self._tip = None
 
     def _on_lex_lang_changed(self):
         if self._current_lex_code:
-            self._show_lex_entry(self._current_lex_code)
+            self._show_lex_entry(self._current_lex_code,
+                                 getattr(self, '_current_lex_verse', None))
 
-    def _show_lex_entry(self, code):
+    def _morphology_html(self, code, verse):
+        """Short morphology line(s) for `code` in `verse` from 원전분해.sdb."""
+        if not (self.bethlehem_wonjun and verse
+                and getattr(self, '_lex_current_book', None)):
+            return ''
+        try:
+            rows = self.bethlehem_wonjun.get_chapter_verses(
+                self._lex_current_book, self._lex_current_chapter)
+        except Exception:
+            return ''
+        btext = next((t for vn, t in rows if vn == verse), None)
+        if not btext:
+            return ''
+        matches = [w for w in parse_wonjun_verse(btext) if w['code'] == code]
+        if not matches:
+            return ''
+        lines = []
+        for w in matches:
+            seg = f"<b>{w['lemma']}</b>"
+            if w['translit']:
+                seg += f" {w['translit']}"
+            if w['pos']:
+                seg += f"  ·  {w['pos']}"
+            if w['gloss'] and w['gloss'] != '_':
+                seg += f"  ·  {w['gloss']}"
+            lines.append(seg)
+        return ("<font color='#3286EA'>[형태소 분석]</font><br>"
+                + '<br>'.join(lines) + "<br><br>")
+
+    def _show_lex_entry(self, code, verse=None):
         self._current_lex_code = code
+        self._current_lex_verse = verse
         lang = self.lex_lang_var.get()
         lex = self.lexicon_ko if lang == 'ko' else self.lexicon_en
-        if not lex:
-            return
-        entry = lex.lookup(code)
-        if entry is None:
-            self.lex_right_text.configure(state=tk.NORMAL)
-            self.lex_right_text.delete('1.0', tk.END)
-            self.lex_right_text.insert(tk.END, f"[{code}] 사전 항목 없음")
-            self.lex_right_text.configure(state=tk.DISABLED)
-            return
+        morph = self._morphology_html(code, verse)
         fg = self.theme['viewer_fg'] if hasattr(self, 'theme') else '#000000'
-        render_dict_html(self.lex_right_text,
-                         f"<b>[{code}]</b><br><br>{entry}",
-                         fg=fg)
+        entry = lex.lookup(code) if lex else None
+        if entry is None:
+            body = f"{morph}<b>[{code}]</b><br><br>사전 항목 없음"
+        else:
+            body = f"{morph}<b>[{code}]</b><br><br>{entry}"
+        render_dict_html(self.lex_right_text, body, fg=fg)
 
     # ---- Version order management ----
 
@@ -2017,6 +2173,67 @@ class AutoBibleApp:
         if book_names:
             self.book_var.set(book_names[0])
 
+    def _restore_last_position(self):
+        """Restore the last viewed book/chapter, else default to first book."""
+        self._populate_books()
+        bn = self.settings.get('last_book_num')
+        chap = self.settings.get('last_chapter')
+        primary = self._get_primary_version()
+        if bn and primary and primary in self.bible_dbs:
+            db = self.bible_dbs[primary]
+            if bn in db.books:
+                short, long_ = db.books[bn]
+                target = f"{long_} ({short})"
+                if target in (self.book_combo['values'] or []):
+                    self.book_var.set(target)
+                    chapters = db.get_chapters(bn)
+                    self.chapter_combo['values'] = [str(c) for c in chapters]
+                    if chap and str(chap) in self.chapter_combo['values']:
+                        self.chapter_var.set(str(chap))
+                    elif chapters:
+                        self.chapter_var.set(str(chapters[0]))
+                    self._load_chapter()
+                    return
+        self._on_book_changed(None)
+
+    # ---- Panel split (sash) persistence ----
+
+    def _restore_sash_positions(self):
+        try:
+            self.root.update_idletasks()
+            hsash = self.settings.get('viewer_hsash') or []
+            for i, x in enumerate(hsash):
+                try:
+                    self.viewer_hpane.sash_place(i, int(x), 1)
+                except Exception:
+                    pass
+            vsash = self.settings.get('viewer_vsash')
+            if vsash is not None:
+                try:
+                    self.viewer_pane.sash_place(0, 1, int(vsash))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _capture_sash_positions(self):
+        try:
+            hsash = []
+            # 3 panels -> 2 sashes
+            for i in range(2):
+                try:
+                    hsash.append(self.viewer_hpane.sash_coord(i)[0])
+                except Exception:
+                    break
+            if hsash:
+                self.settings['viewer_hsash'] = hsash
+            try:
+                self.settings['viewer_vsash'] = self.viewer_pane.sash_coord(0)[1]
+            except Exception:
+                pass
+        except Exception:
+            pass
+
     def _on_book_changed(self, event):
         primary = self._get_primary_version()
         book_name = self.book_var.get()
@@ -2059,6 +2276,12 @@ class AutoBibleApp:
 
         chapter = int(chapter_str)
         checked = self._checked_in_order()
+
+        # Remember position (persisted on close) + current context for lexicon.
+        self._lex_current_book = bn
+        self._lex_current_chapter = chapter
+        self.settings['last_book_num'] = bn
+        self.settings['last_chapter'] = chapter
 
         # Gather per-version verse maps; union all verse numbers across versions.
         version_verses = {}
@@ -2421,6 +2644,7 @@ class AutoBibleApp:
             verse_str = Formatter._format_verse_list(verses) if verses else "전체"
             log_entry = f"[{short_name} {chapter}:{verse_str}] -> {len(parts)}개 버전\n"
             self.root.after(0, lambda e=log_entry: self._append_log(e))
+            self.root.after(0, lambda: self._add_recent_ref(book_num, chapter, verses, short_name))
 
     def _update_viewer_from_ref(self, book_num, chapter, verses):
         primary = self._get_primary_version()
@@ -2450,6 +2674,34 @@ class AutoBibleApp:
         self.log_text.insert(tk.END, text)
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
+
+    # ---- Recent references ----
+
+    def _refresh_recent_combo(self):
+        if not hasattr(self, 'recent_combo'):
+            return
+        labels = [r.get('label', '') for r in self.settings.get('recent_refs', [])]
+        self.recent_combo['values'] = labels
+
+    def _add_recent_ref(self, book_num, chapter, verses, short_name):
+        verse_str = Formatter._format_verse_list(verses) if verses else ''
+        label = (f"{short_name} {chapter}:{verse_str}" if verse_str
+                 else f"{short_name} {chapter}")
+        entry = {'book_num': book_num, 'chapter': chapter,
+                 'verses': list(verses or []), 'label': label}
+        recents = [r for r in self.settings.get('recent_refs', [])
+                   if r.get('label') != label]
+        recents.insert(0, entry)
+        self.settings['recent_refs'] = recents[:20]
+        self._refresh_recent_combo()
+
+    def _on_recent_selected(self, event):
+        label = self.recent_var.get()
+        for r in self.settings.get('recent_refs', []):
+            if r.get('label') == label:
+                self._update_viewer_from_ref(r['book_num'], r['chapter'],
+                                             r.get('verses') or [])
+                break
 
     def _update_status(self, text, active):
         t = self.theme
@@ -2510,10 +2762,16 @@ class AutoBibleApp:
         self.viewer_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
         self.log_frame.configure(bg=t['frame_bg'])
         self._log_label.configure(bg=t['frame_bg'], fg=t['fg'])
+        if hasattr(self, 'log_header'):
+            self.log_header.configure(bg=t['frame_bg'])
+            self.recent_label.configure(bg=t['frame_bg'], fg=t['fg'])
         # Log inner frame
         for w in self.log_frame.winfo_children():
             if isinstance(w, tk.Frame):
                 w.configure(bg=t['frame_bg'])
+                for c in w.winfo_children():
+                    if isinstance(c, tk.Label):
+                        c.configure(bg=t['frame_bg'], fg=t['fg'])
         self.log_text.configure(bg=t['entry_bg'], fg=t['entry_fg'],
                                 insertbackground=t['fg'])
         self.log_scroll.configure(bg=t['frame_bg'], troughcolor=t['entry_bg'])
@@ -2775,9 +3033,12 @@ class AutoBibleApp:
         info = self.update_info
         if not info:
             return
-        if not IS_WINDOWS:
-            # The in-place updater (cmd/batch/robocopy) is Windows-only.
-            # On macOS/Linux, point the user at the download page instead.
+        is_mac = (sys.platform == 'darwin')
+        if not getattr(sys, 'frozen', False):
+            messagebox.showinfo("업데이트", "소스 실행 모드에서는 자동 업데이트가 적용되지 않습니다.")
+            return
+        if not (IS_WINDOWS or is_mac):
+            # In-place update implemented for Windows + macOS only.
             ver = info.get('version', '')
             if messagebox.askyesno(
                     "업데이트",
@@ -2788,9 +3049,6 @@ class AutoBibleApp:
                     webbrowser.open(RELEASES_PAGE_URL)
                 except Exception:
                     pass
-            return
-        if not getattr(sys, 'frozen', False):
-            messagebox.showinfo("업데이트", "소스 실행 모드에서는 자동 업데이트가 적용되지 않습니다.")
             return
 
         win = tk.Toplevel(self.root)
@@ -2829,28 +3087,63 @@ class AutoBibleApp:
                     src_dir = os.path.join(extract_dir, entries[0])
                 else:
                     src_dir = extract_dir
-                if not os.path.exists(os.path.join(src_dir, 'AutoBible.exe')):
-                    raise RuntimeError("zip 파일에 AutoBible.exe가 없습니다.")
-
-                bat_path = os.path.join(tmpdir, 'updater.bat')
-                self._write_updater_bat(bat_path, src_dir, BASE_DIR)
 
                 self.root.after(0, lambda: status.configure(text="앱 종료 후 교체합니다..."))
-                # Spawn the updater in a hidden console (CREATE_NO_WINDOW keeps a
-                # console so timeout/ping/tasklist work, but shows no window).
-                # Do NOT combine with DETACHED_PROCESS — that conflict produced a
-                # visible, mis-behaving console window.
-                flags = subprocess.CREATE_NEW_PROCESS_GROUP
-                flags |= getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-                subprocess.Popen(['cmd', '/c', bat_path], creationflags=flags,
-                                 close_fds=True)
-                # Force-quit so the updater's wait loop sees the process gone.
-                self.root.after(300, self._quit_for_update)
+                if is_mac:
+                    app_src = os.path.join(src_dir, 'AutoBible.app')
+                    if not os.path.isdir(app_src):
+                        raise RuntimeError("zip 파일에 AutoBible.app이 없습니다.")
+                    sh_path = os.path.join(tmpdir, 'updater.sh')
+                    self._write_mac_updater_sh(sh_path, src_dir, BASE_DIR, os.getpid())
+                    subprocess.Popen(['/bin/bash', sh_path],
+                                     start_new_session=True, close_fds=True)
+                    self.root.after(300, self._quit_for_update)
+                else:
+                    if not os.path.exists(os.path.join(src_dir, 'AutoBible.exe')):
+                        raise RuntimeError("zip 파일에 AutoBible.exe가 없습니다.")
+                    bat_path = os.path.join(tmpdir, 'updater.bat')
+                    self._write_updater_bat(bat_path, src_dir, BASE_DIR)
+                    # Hidden console (CREATE_NO_WINDOW); do NOT add DETACHED_PROCESS
+                    # (that conflict produced a visible, mis-behaving window).
+                    flags = subprocess.CREATE_NEW_PROCESS_GROUP
+                    flags |= getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+                    subprocess.Popen(['cmd', '/c', bat_path], creationflags=flags,
+                                     close_fds=True)
+                    self.root.after(300, self._quit_for_update)
             except Exception as e:
                 err = str(e)
                 self.root.after(0, lambda: self._update_failed(err, win))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _write_mac_updater_sh(self, path, src_dir, install_dir, pid):
+        """Bash updater: wait for the app to quit, swap the .app + data, relaunch."""
+        # POSIX path (this script only runs on macOS); avoid os.path.join so a
+        # build/test on Windows can't inject a backslash separator.
+        app_dst = install_dir.rstrip('/') + '/AutoBible.app'
+        lines = [
+            '#!/bin/bash',
+            f'SRC={shlex.quote(src_dir)}',
+            f'DST={shlex.quote(install_dir)}',
+            f'APP={shlex.quote(app_dst)}',
+            f'LOG="$DST/update_apply.log"',
+            'echo "[updater] start $(date)" > "$LOG"',
+            # wait (max ~30s) for the running app to exit
+            f'for i in $(seq 1 30); do kill -0 {int(pid)} 2>/dev/null || break; sleep 1; done',
+            'sleep 1',
+            'rm -rf "$APP"',
+            'ditto "$SRC/AutoBible.app" "$APP" >> "$LOG" 2>&1',
+            'RC=$?',
+            '[ -d "$SRC/bible_versions" ] && ditto "$SRC/bible_versions" "$DST/bible_versions" >> "$LOG" 2>&1',
+            '[ -d "$SRC/original_lang" ] && ditto "$SRC/original_lang" "$DST/original_lang" >> "$LOG" 2>&1',
+            'xattr -dr com.apple.quarantine "$APP" >/dev/null 2>&1',
+            'echo "[updater] ditto exit $RC" >> "$LOG"',
+            'open "$APP"',
+            'rm -f "$0"',
+            'exit 0',
+        ]
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + '\n')
 
     def _quit_for_update(self):
         """Hard-exit used right before the external updater swaps files."""
@@ -2964,6 +3257,7 @@ class AutoBibleApp:
 
     def _on_close(self):
         self.monitoring = False
+        self._capture_sash_positions()
         self._save_settings()
         for db in self.bible_dbs.values():
             try:
