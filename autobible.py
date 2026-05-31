@@ -1394,6 +1394,11 @@ class AutoBibleApp:
         self.lex_mid_text.tag_bind('lex_word', '<Leave>',
                                     lambda e: self.lex_mid_text.configure(cursor=''))
         self.lex_mid_text.bind('<Button-1>', self._on_lex_word_click)
+        # Right-click (Win/Linux Button-3; macOS two-finger/right) opens a window.
+        self.lex_mid_text.bind('<Button-3>', self._on_lex_word_popup)
+        if sys.platform == 'darwin':
+            self.lex_mid_text.bind('<Button-2>', self._on_lex_word_popup)
+            self.lex_mid_text.bind('<Command-Button-1>', self._on_lex_word_popup)
         self.lex_mid_text.bind('<Motion>', self._on_lex_hover)
         self.lex_mid_text.bind('<Leave>', self._on_lex_hover_leave)
 
@@ -1688,7 +1693,8 @@ class AutoBibleApp:
             text.insert(tk.END, '\n\n', (block,))
         text.configure(state=tk.DISABLED)
 
-    def _on_lex_word_click(self, event):
+    def _lex_word_at(self, event):
+        """Return (code, verse) for the word under the event, or (None, None)."""
         idx = self.lex_mid_text.index(f"@{event.x},{event.y}")
         code = verse = None
         for tag in self.lex_mid_text.tag_names(idx):
@@ -1699,13 +1705,26 @@ class AutoBibleApp:
                     verse = int(tag[3:])
                 except ValueError:
                     pass
+        return code, verse
+
+    def _on_lex_word_click(self, event):
+        code, verse = self._lex_word_at(event)
         if not code:
             return
         self._hide_tip()
-        if event.state & 0x0004:   # Control held → open an independent window
+        if event.state & 0x0004:   # Control held → independent window
             self._open_lex_popup(code, verse)
         else:
             self._show_lex_entry(code, verse)
+
+    def _on_lex_word_popup(self, event):
+        """Right-click / Command-click → open an independent dictionary window."""
+        code, verse = self._lex_word_at(event)
+        if not code:
+            return
+        self._hide_tip()
+        self._open_lex_popup(code, verse)
+        return 'break'
 
     # ---- Hover preview ----
 
