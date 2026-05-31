@@ -91,15 +91,17 @@ jobs:
           # Copying into the bundle invalidated PyInstaller's signature, which
           # makes macOS report the app as "damaged". Re-sign ad-hoc to re-seal.
           codesign --force --deep --sign - "$APP" || echo "codesign failed (continuing)"
+          # Copy with ditto (NOT cp -R) so the code signature is preserved;
+          # cp -R breaks signing and macOS then reports the app as "damaged".
           OUT="AutoBible-mac"
           rm -rf "$OUT" && mkdir -p "$OUT"
-          cp -R "$APP" "$OUT/"
+          ditto "$APP" "$OUT/AutoBible.app"
           # zip — used by the in-app auto-updater
           ( cd "$OUT" && zip -r -y "../AutoBible-macos-v$V.zip" . )
           # dmg — friendly drag-to-Applications installer
           STAGE="dmg_stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          cp -R "$APP" "$STAGE/"
+          ditto "$APP" "$STAGE/AutoBible.app"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "AutoBible" -srcfolder "$STAGE" -ov \
             -format UDZO "AutoBible-macos-v$V.dmg"

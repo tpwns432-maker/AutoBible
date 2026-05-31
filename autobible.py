@@ -69,6 +69,23 @@ def get_resource_dir():
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
+
+def system_env():
+    """Environment for running SYSTEM binaries (e.g. pbpaste) from a frozen app.
+
+    PyInstaller injects DYLD_/LD_LIBRARY_PATH pointing at the bundle's libs,
+    which can break system executables. Restore the original values (saved by
+    the bootloader with a _ORIG suffix) so the child runs in a clean env.
+    """
+    env = dict(os.environ)
+    for var in ('DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH', 'LD_LIBRARY_PATH'):
+        orig = env.pop(var + '_ORIG', None)
+        if orig:
+            env[var] = orig
+        else:
+            env.pop(var, None)
+    return env
+
 BASE_DIR = get_base_dir()
 SETTINGS_FILE = "autobible_settings.json"
 BIBLE_DIR = "bible_versions"
@@ -2797,9 +2814,11 @@ class AutoBibleApp:
         text copied by other apps, so use pbpaste; elsewhere use tkinter."""
         if sys.platform == 'darwin':
             try:
-                r = subprocess.run(['pbpaste'], capture_output=True, timeout=2)
+                r = subprocess.run(['/usr/bin/pbpaste'], capture_output=True,
+                                   timeout=2, env=system_env())
                 return r.stdout.decode('utf-8', 'replace')
-            except Exception:
+            except Exception as e:
+                self._log_update(f'pbpaste 실패: {e}')
                 return ''
         try:
             return self.root.clipboard_get()
@@ -2809,9 +2828,10 @@ class AutoBibleApp:
     def _clipboard_write(self, text):
         if sys.platform == 'darwin':
             try:
-                subprocess.run(['pbcopy'], input=text.encode('utf-8'), timeout=2)
-            except Exception:
-                pass
+                subprocess.run(['/usr/bin/pbcopy'], input=text.encode('utf-8'),
+                               timeout=2, env=system_env())
+            except Exception as e:
+                self._log_update(f'pbcopy 실패: {e}')
             return
         try:
             self.root.clipboard_clear()
