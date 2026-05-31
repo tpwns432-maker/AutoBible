@@ -24,9 +24,13 @@ image.jpg
 사용법.txt
 *.png
 
-# Original-language data (bundled in release zip, not in git)
+# Original-language data: track only the 3 files used (for CI builds);
+# ignore the rest of the folder and the full legacy archive.
 BethlehemWin/
-original_lang/
+original_lang/*
+!original_lang/개역한글S.sdb
+!original_lang/HebGrkKo.dct
+!original_lang/HebGrkEn.dct
 
 # Mac source package (assembled artifact, contains data)
 AutoBible-mac-source.zip

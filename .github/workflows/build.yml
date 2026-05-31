@@ -1,0 +1,101 @@
+name: Build and Release
+
+# Push a tag like v1.1.7 to build Windows + macOS and attach the zips to a
+# GitHub Release. Or run manually (workflow_dispatch) to just get the zips as
+# downloadable artifacts without creating a release.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # -------------------------------------------------------------------
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build AutoBible.exe
+        run: >
+          python -m PyInstaller --onedir --windowed --noconfirm --clean
+          --icon=icon.ico --name AutoBible autobible.py
+
+      - name: Assemble package
+        shell: pwsh
+        run: |
+          $v = ([regex]::Match((Get-Content autobible.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Copy-Item icon.ico dist/AutoBible/ -Force
+          New-Item -ItemType Directory -Force dist/AutoBible/bible_versions | Out-Null
+          Copy-Item bible_versions/KRV.SQLite3 dist/AutoBible/bible_versions/ -Force
+          New-Item -ItemType Directory -Force dist/AutoBible/original_lang | Out-Null
+          Copy-Item original_lang/* dist/AutoBible/original_lang/ -Force
+          Compress-Archive -Path dist/AutoBible/* -DestinationPath "AutoBible-windows-v$v.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: AutoBible-windows-*.zip
+
+  # -------------------------------------------------------------------
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build AutoBible.app
+        run: >
+          python -m PyInstaller --onedir --windowed --noconfirm --clean
+          --name AutoBible autobible.py
+
+      - name: Assemble package
+        run: |
+          V=$(python -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('autobible.py').read()).group(1))")
+          OUT="AutoBible-mac"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          if [ -d dist/AutoBible.app ]; then
+            cp -R dist/AutoBible.app "$OUT/"
+          else
+            cp -R dist/AutoBible/AutoBible.app "$OUT/"
+          fi
+          mkdir -p "$OUT/bible_versions" && cp bible_versions/KRV.SQLite3 "$OUT/bible_versions/"
+          mkdir -p "$OUT/original_lang" && cp original_lang/* "$OUT/original_lang/"
+          ( cd "$OUT" && zip -r -y "../AutoBible-macos-v$V.zip" . )
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: AutoBible-macos-*.zip
+
+  # -------------------------------------------------------------------
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Attach builds to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            windows/*.zip
+            macos/*.zip
