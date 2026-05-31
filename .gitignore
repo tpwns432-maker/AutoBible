@@ -27,3 +27,6 @@ image.jpg
 # Original-language data (bundled in release zip, not in git)
 BethlehemWin/
 original_lang/
+
+# Mac source package (assembled artifact, contains data)
+AutoBible-mac-source.zip

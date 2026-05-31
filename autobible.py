@@ -24,6 +24,21 @@ __version__ = "1.1.6"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
+# Platform-aware font families. Windows keeps its original fonts exactly;
+# macOS/Linux get native equivalents so Korean + UI text render cleanly.
+if sys.platform == 'darwin':
+    UI_FONT = 'Apple SD Gothic Neo'    # Korean + Latin UI
+    BODY_FONT = 'Apple SD Gothic Neo'  # Korean scripture body
+    MONO_FONT = 'Menlo'                # monospace log
+elif IS_WINDOWS:
+    UI_FONT = 'Segoe UI'
+    BODY_FONT = 'Malgun Gothic'
+    MONO_FONT = 'Consolas'
+else:  # Linux / other
+    UI_FONT = 'Noto Sans CJK KR'
+    BODY_FONT = 'Noto Sans CJK KR'
+    MONO_FONT = 'DejaVu Sans Mono'
+
 GITHUB_OWNER = "tpwns432-maker"
 GITHUB_REPO = "AutoBible"
 UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
@@ -34,10 +49,18 @@ RELEASES_PAGE_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/l
 # ---------------------------------------------------------------------------
 
 def get_base_dir():
-    """Get the base directory - works for both script and PyInstaller exe."""
+    """Get the base directory - works for both script and PyInstaller bundle.
+
+    On Windows the data folders sit next to AutoBible.exe. On a macOS .app
+    bundle, sys.executable lives in AutoBible.app/Contents/MacOS/, so walk up
+    out of the bundle to look for the data folders next to AutoBible.app.
+    """
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle: use exe's directory (not temp _MEIPASS)
-        return os.path.dirname(sys.executable)
+        exe_dir = os.path.dirname(sys.executable)
+        if sys.platform == 'darwin' and exe_dir.endswith(os.path.join('Contents', 'MacOS')):
+            # exe_dir = /path/AutoBible.app/Contents/MacOS -> /path
+            return os.path.dirname(os.path.dirname(os.path.dirname(exe_dir)))
+        return exe_dir
     return os.path.dirname(os.path.abspath(__file__))
 
 def get_resource_dir():
@@ -502,7 +525,7 @@ def parse_wonjun_verse(text):
     return out
 
 
-def render_dict_html(text_widget, html, base_font=('Malgun Gothic', 10), fg='#000000'):
+def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000'):
     """Render HTML-marked dictionary text into a Tk Text widget.
 
     Handles a small subset: <font color>, <b>, <br>, <sup>, <num>, '^' separator.
@@ -1169,25 +1192,25 @@ class AutoBibleApp:
         self.top_bar.pack(fill=tk.X, padx=8, pady=6)
 
         self.title_label = tk.Label(self.top_bar, text="AutoBible",
-                                      font=('Segoe UI', 16, 'bold'))
+                                      font=(UI_FONT, 16, 'bold'))
         self.title_label.pack(side=tk.LEFT, padx=(4, 20))
 
         self.monitor_btn = tk.Button(
-            self.top_bar, text="  모니터링 시작  ", font=('Segoe UI', 10),
+            self.top_bar, text="  모니터링 시작  ", font=(UI_FONT, 10),
             relief=tk.FLAT, cursor='hand2', command=self._toggle_monitoring)
         self.monitor_btn.pack(side=tk.LEFT, padx=4)
 
         self.status_label = tk.Label(self.top_bar, text=" 대기 중 ",
-                                       font=('Segoe UI', 9), padx=8, pady=2)
+                                       font=(UI_FONT, 9), padx=8, pady=2)
         self.status_label.pack(side=tk.LEFT, padx=8)
 
         self.dark_btn = tk.Button(
-            self.top_bar, text="  다크 모드  ", font=('Segoe UI', 9),
+            self.top_bar, text="  다크 모드  ", font=(UI_FONT, 9),
             relief=tk.FLAT, cursor='hand2', command=self._toggle_dark_mode)
         self.dark_btn.pack(side=tk.RIGHT, padx=4)
 
         self.update_check_btn = tk.Button(
-            self.top_bar, text=" 업데이트 확인 ", font=('Segoe UI', 9),
+            self.top_bar, text=" 업데이트 확인 ", font=(UI_FONT, 9),
             relief=tk.FLAT, cursor='hand2', command=self._manual_update_check)
         self.update_check_btn.pack(side=tk.RIGHT, padx=4)
 
@@ -1206,13 +1229,13 @@ class AutoBibleApp:
         version_bar.pack(fill=tk.X, padx=4, pady=(4, 0))
         self.version_bar = version_bar
 
-        tk.Label(version_bar, text="버전:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(version_bar, text="버전:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
 
         self.chip_frame = tk.Frame(version_bar)
         self.chip_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         tk.Label(version_bar, text="(클릭: 토글, 드래그: 순서 변경)",
-                 font=('Segoe UI', 8)).pack(side=tk.LEFT, padx=(8, 0))
+                 font=(UI_FONT, 8)).pack(side=tk.LEFT, padx=(8, 0))
 
         # Initialize ordered viewer state from settings
         self._viewer_order = list(self.settings['viewer_version_order'])
@@ -1227,44 +1250,44 @@ class AutoBibleApp:
         nav.pack(fill=tk.X, padx=4, pady=(4, 0))
         self.nav_frame = nav
 
-        tk.Label(nav, text="책:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(nav, text="책:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
         self.book_var = tk.StringVar()
         self.book_combo = ttk.Combobox(nav, textvariable=self.book_var,
                                         state='readonly', width=14)
         self.book_combo.pack(side=tk.LEFT, padx=(0, 8))
         self.book_combo.bind('<<ComboboxSelected>>', self._on_book_changed)
 
-        tk.Label(nav, text="장:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(nav, text="장:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
         self.chapter_var = tk.StringVar()
         self.chapter_combo = ttk.Combobox(nav, textvariable=self.chapter_var,
                                             state='readonly', width=5)
         self.chapter_combo.pack(side=tk.LEFT, padx=(0, 8))
         self.chapter_combo.bind('<<ComboboxSelected>>', self._on_chapter_changed)
 
-        self.prev_btn = tk.Button(nav, text=" < ", font=('Segoe UI', 9),
+        self.prev_btn = tk.Button(nav, text=" < ", font=(UI_FONT, 9),
                                     relief=tk.FLAT, cursor='hand2', command=self._prev_chapter)
         self.prev_btn.pack(side=tk.LEFT, padx=2)
-        self.next_btn = tk.Button(nav, text=" > ", font=('Segoe UI', 9),
+        self.next_btn = tk.Button(nav, text=" > ", font=(UI_FONT, 9),
                                     relief=tk.FLAT, cursor='hand2', command=self._next_chapter)
         self.next_btn.pack(side=tk.LEFT, padx=2)
 
-        tk.Label(nav, text="절:", font=('Segoe UI', 9)).pack(side=tk.LEFT, padx=(12, 4))
+        tk.Label(nav, text="절:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(12, 4))
         self.verse_jump_var = tk.StringVar()
         self.verse_jump_entry = tk.Entry(nav, textvariable=self.verse_jump_var,
-                                           width=5, font=('Segoe UI', 9))
+                                           width=5, font=(UI_FONT, 9))
         self.verse_jump_entry.pack(side=tk.LEFT, padx=(0, 4))
         self.verse_jump_entry.bind('<Return>', self._on_verse_jump)
-        self.jump_btn = tk.Button(nav, text="이동", font=('Segoe UI', 9),
+        self.jump_btn = tk.Button(nav, text="이동", font=(UI_FONT, 9),
                                     relief=tk.FLAT, cursor='hand2',
                                     command=lambda: self._on_verse_jump(None))
         self.jump_btn.pack(side=tk.LEFT)
 
         # Font size controls (rightmost)
-        self.font_plus_btn = tk.Button(nav, text=" A+ ", font=('Segoe UI', 9),
+        self.font_plus_btn = tk.Button(nav, text=" A+ ", font=(UI_FONT, 9),
                                          relief=tk.FLAT, cursor='hand2',
                                          command=lambda: self._change_font_size(1))
         self.font_plus_btn.pack(side=tk.RIGHT, padx=2)
-        self.font_minus_btn = tk.Button(nav, text=" A- ", font=('Segoe UI', 9),
+        self.font_minus_btn = tk.Button(nav, text=" A- ", font=(UI_FONT, 9),
                                           relief=tk.FLAT, cursor='hand2',
                                           command=lambda: self._change_font_size(-1))
         self.font_minus_btn.pack(side=tk.RIGHT, padx=2)
@@ -1277,17 +1300,17 @@ class AutoBibleApp:
         self.lex_lang_var = tk.StringVar(value=default_lang)
         self.lex_lang_en_rb = tk.Radiobutton(
             nav, text='영어', variable=self.lex_lang_var, value='en',
-            font=('Segoe UI', 9),
+            font=(UI_FONT, 9),
             state=(tk.NORMAL if has_en else tk.DISABLED),
             command=self._on_lex_lang_changed)
         self.lex_lang_en_rb.pack(side=tk.RIGHT)
         self.lex_lang_ko_rb = tk.Radiobutton(
             nav, text='한글', variable=self.lex_lang_var, value='ko',
-            font=('Segoe UI', 9),
+            font=(UI_FONT, 9),
             state=(tk.NORMAL if has_ko else tk.DISABLED),
             command=self._on_lex_lang_changed)
         self.lex_lang_ko_rb.pack(side=tk.RIGHT)
-        self.lex_lang_label = tk.Label(nav, text="사전:", font=('Segoe UI', 9))
+        self.lex_lang_label = tk.Label(nav, text="사전:", font=(UI_FONT, 9))
         self.lex_lang_label.pack(side=tk.RIGHT, padx=(8, 4))
 
         # Main vertical PanedWindow: 3-panel area (top) + activity log (bottom)
@@ -1306,7 +1329,7 @@ class AutoBibleApp:
         tf = tk.Frame(hpw)
         hpw.add(tf, minsize=300, stretch="always")
         self.viewer_text_frame = tf
-        self.viewer_text = tk.Text(tf, font=('Malgun Gothic', 11), wrap=tk.WORD,
+        self.viewer_text = tk.Text(tf, font=(BODY_FONT, 11), wrap=tk.WORD,
                                      state=tk.DISABLED, spacing1=2, spacing3=2,
                                      padx=12, pady=8)
         self.viewer_scroll = tk.Scrollbar(tf, command=self.viewer_text.yview)
@@ -1318,18 +1341,18 @@ class AutoBibleApp:
         mid = tk.Frame(hpw)
         hpw.add(mid, minsize=150, stretch="always")
         self.lex_mid_frame = mid
-        self.lex_mid_label = tk.Label(mid, text="원어 (단어 클릭)", font=('Segoe UI', 9, 'bold'))
+        self.lex_mid_label = tk.Label(mid, text="원어 (단어 클릭)", font=(UI_FONT, 9, 'bold'))
         self.lex_mid_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
         mf = tk.Frame(mid)
         mf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.lex_mid_text = tk.Text(mf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+        self.lex_mid_text = tk.Text(mf, font=(BODY_FONT, 10), wrap=tk.WORD,
                                       state=tk.DISABLED, spacing1=2, spacing3=2,
                                       padx=8, pady=6)
         self.lex_mid_scroll = tk.Scrollbar(mf, command=self.lex_mid_text.yview)
         self.lex_mid_text.configure(yscrollcommand=self.lex_mid_scroll.set)
         self.lex_mid_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.lex_mid_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.lex_mid_text.tag_configure('lex_vnum', font=('Malgun Gothic', 9, 'bold'))
+        self.lex_mid_text.tag_configure('lex_vnum', font=(BODY_FONT, 9, 'bold'))
         self.lex_mid_text.tag_configure('lex_word')
         self.lex_mid_text.tag_bind('lex_word', '<Enter>',
                                     lambda e: self.lex_mid_text.configure(cursor='hand2'))
@@ -1341,11 +1364,11 @@ class AutoBibleApp:
         rg = tk.Frame(hpw)
         hpw.add(rg, minsize=150, stretch="always")
         self.lex_right_frame = rg
-        self.lex_right_label = tk.Label(rg, text="사전", font=('Segoe UI', 9, 'bold'))
+        self.lex_right_label = tk.Label(rg, text="사전", font=(UI_FONT, 9, 'bold'))
         self.lex_right_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
         rgf = tk.Frame(rg)
         rgf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.lex_right_text = tk.Text(rgf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+        self.lex_right_text = tk.Text(rgf, font=(BODY_FONT, 10), wrap=tk.WORD,
                                         state=tk.DISABLED, spacing1=2, spacing3=2,
                                         padx=8, pady=6)
         self.lex_right_scroll = tk.Scrollbar(rgf, command=self.lex_right_text.yview)
@@ -1360,13 +1383,13 @@ class AutoBibleApp:
         vpw.add(log_frame, minsize=80, stretch="never")
         self.log_frame = log_frame
 
-        log_lbl = tk.Label(log_frame, text="활동 로그", font=('Segoe UI', 9, 'bold'))
+        log_lbl = tk.Label(log_frame, text="활동 로그", font=(UI_FONT, 9, 'bold'))
         log_lbl.pack(anchor=tk.W, padx=8, pady=(4, 2))
         self._log_label = log_lbl
 
         log_inner = tk.Frame(log_frame)
         log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
-        self.log_text = tk.Text(log_inner, font=('Consolas', 9), wrap=tk.WORD,
+        self.log_text = tk.Text(log_inner, font=(MONO_FONT, 9), wrap=tk.WORD,
                                   state=tk.DISABLED, height=4)
         self.log_scroll = tk.Scrollbar(log_inner, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=self.log_scroll.set)
@@ -1396,7 +1419,7 @@ class AutoBibleApp:
 
         # Title
         lbl = tk.Label(left, text="성경 버전 선택 / 출력 순서",
-                        font=('Segoe UI', 10, 'bold'))
+                        font=(UI_FONT, 10, 'bold'))
         lbl.pack(anchor=tk.W, padx=8, pady=(8, 4))
 
         # Dual listbox area
@@ -1406,42 +1429,42 @@ class AutoBibleApp:
         # Available list
         avail_frame = tk.Frame(dual_frame)
         avail_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        tk.Label(avail_frame, text="성경 목록", font=('Segoe UI', 9)).pack(anchor=tk.W)
-        self.avail_listbox = tk.Listbox(avail_frame, font=('Segoe UI', 9),
+        tk.Label(avail_frame, text="성경 목록", font=(UI_FONT, 9)).pack(anchor=tk.W)
+        self.avail_listbox = tk.Listbox(avail_frame, font=(UI_FONT, 9),
                                           selectmode=tk.EXTENDED, height=10)
         self.avail_listbox.pack(fill=tk.BOTH, expand=True)
 
         # Buttons between lists
         btn_frame = tk.Frame(dual_frame)
         btn_frame.pack(side=tk.LEFT, padx=8, pady=20)
-        self.add_btn = tk.Button(btn_frame, text=" 추가 → ", font=('Segoe UI', 9),
+        self.add_btn = tk.Button(btn_frame, text=" 추가 → ", font=(UI_FONT, 9),
                                    relief=tk.FLAT, cursor='hand2', command=self._add_to_order)
         self.add_btn.pack(pady=4)
-        self.remove_btn = tk.Button(btn_frame, text=" ← 제거 ", font=('Segoe UI', 9),
+        self.remove_btn = tk.Button(btn_frame, text=" ← 제거 ", font=(UI_FONT, 9),
                                       relief=tk.FLAT, cursor='hand2', command=self._remove_from_order)
         self.remove_btn.pack(pady=4)
-        self.refresh_btn = tk.Button(btn_frame, text="새로고침", font=('Segoe UI', 9),
+        self.refresh_btn = tk.Button(btn_frame, text="새로고침", font=(UI_FONT, 9),
                                        relief=tk.FLAT, cursor='hand2', command=self._refresh_databases)
         self.refresh_btn.pack(pady=(12, 4))
 
         # Order list
         order_frame = tk.Frame(dual_frame)
         order_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        tk.Label(order_frame, text="성경 출력 순서", font=('Segoe UI', 9)).pack(anchor=tk.W)
-        self.order_listbox = tk.Listbox(order_frame, font=('Segoe UI', 9),
+        tk.Label(order_frame, text="성경 출력 순서", font=(UI_FONT, 9)).pack(anchor=tk.W)
+        self.order_listbox = tk.Listbox(order_frame, font=(UI_FONT, 9),
                                           selectmode=tk.SINGLE, height=10)
         self.order_listbox.pack(fill=tk.BOTH, expand=True)
 
         # Order control buttons
         order_btn_frame = tk.Frame(left)
         order_btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
-        self.up_btn = tk.Button(order_btn_frame, text=" ▲ 위로 ", font=('Segoe UI', 9),
+        self.up_btn = tk.Button(order_btn_frame, text=" ▲ 위로 ", font=(UI_FONT, 9),
                                   relief=tk.FLAT, cursor='hand2', command=self._move_up)
         self.up_btn.pack(side=tk.LEFT, padx=4)
-        self.down_btn = tk.Button(order_btn_frame, text=" ▼ 아래로 ", font=('Segoe UI', 9),
+        self.down_btn = tk.Button(order_btn_frame, text=" ▼ 아래로 ", font=(UI_FONT, 9),
                                     relief=tk.FLAT, cursor='hand2', command=self._move_down)
         self.down_btn.pack(side=tk.LEFT, padx=4)
-        self.clear_btn = tk.Button(order_btn_frame, text=" 모두 제거 ", font=('Segoe UI', 9),
+        self.clear_btn = tk.Button(order_btn_frame, text=" 모두 제거 ", font=(UI_FONT, 9),
                                      relief=tk.FLAT, cursor='hand2', command=self._clear_order)
         self.clear_btn.pack(side=tk.RIGHT, padx=4)
 
@@ -1479,92 +1502,92 @@ class AutoBibleApp:
         sf = self.settings_scroll_frame  # shorthand
 
         # --- 표기 설정 (한국어 버전용) ---
-        tk.Label(sf, text="표기 설정 (한국어 버전용)", font=('Segoe UI', 10, 'bold')).pack(
+        tk.Label(sf, text="표기 설정 (한국어 버전용)", font=(UI_FONT, 10, 'bold')).pack(
             anchor=tk.W, padx=8, pady=(8, 4))
         tk.Label(sf, text="※ 영어 성경(ESV/NKJV 등)은 항상 영어식+하이픈으로 출력됩니다.",
-                 font=('Segoe UI', 8)).pack(anchor=tk.W, padx=12)
+                 font=(UI_FONT, 8)).pack(anchor=tk.W, padx=12)
 
         # Book name style
-        f1 = tk.LabelFrame(sf, text=" 책 이름 ", font=('Segoe UI', 9))
+        f1 = tk.LabelFrame(sf, text=" 책 이름 ", font=(UI_FONT, 9))
         f1.pack(fill=tk.X, padx=12, pady=4)
         self.book_name_var = tk.StringVar(value=self.settings['book_name'])
         for val, txt in [('long_ko', '한글 정식'), ('short_ko', '한글 약칭'),
                          ('long_en', '영문 정식'), ('short_en', '영문 약칭')]:
             rb = tk.Radiobutton(f1, text=txt, variable=self.book_name_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Chapter:Verse format
-        f2 = tk.LabelFrame(sf, text=" 장절 표기 ", font=('Segoe UI', 9))
+        f2 = tk.LabelFrame(sf, text=" 장절 표기 ", font=(UI_FONT, 9))
         f2.pack(fill=tk.X, padx=12, pady=4)
         self.cv_format_var = tk.StringVar(value=self.settings['chapter_verse_format'])
         for val, txt in [('colon', '1:1'), ('korean', '1장 1절')]:
             rb = tk.Radiobutton(f2, text=txt, variable=self.cv_format_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Bracket style
-        f3 = tk.LabelFrame(sf, text=" 괄호 ", font=('Segoe UI', 9))
+        f3 = tk.LabelFrame(sf, text=" 괄호 ", font=(UI_FONT, 9))
         f3.pack(fill=tk.X, padx=12, pady=4)
         self.bracket_var = tk.StringVar(value=self.settings['bracket_style'])
         for val, txt in [('none', '없음'), ('[]', '[ ]'), ('()', '( )')]:
             rb = tk.Radiobutton(f3, text=txt, variable=self.bracket_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Reference position
-        f4 = tk.LabelFrame(sf, text=" 표기 위치 ", font=('Segoe UI', 9))
+        f4 = tk.LabelFrame(sf, text=" 표기 위치 ", font=(UI_FONT, 9))
         f4.pack(fill=tk.X, padx=12, pady=4)
         self.position_var = tk.StringVar(value=self.settings['ref_position'])
         for val, txt in [('before', '본문 앞'), ('after', '본문 뒤')]:
             rb = tk.Radiobutton(f4, text=txt, variable=self.position_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Range symbol
-        f5 = tk.LabelFrame(sf, text=" 범위 연결 기호 ", font=('Segoe UI', 9))
+        f5 = tk.LabelFrame(sf, text=" 범위 연결 기호 ", font=(UI_FONT, 9))
         f5.pack(fill=tk.X, padx=12, pady=4)
         self.range_var = tk.StringVar(value=self.settings['range_symbol'])
         for val, txt in [('-', '-'), ('~', '~')]:
             rb = tk.Radiobutton(f5, text=txt, variable=self.range_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Ref-body separator
-        f6 = tk.LabelFrame(sf, text=" 레퍼런스-본문 구분 기호 ", font=('Segoe UI', 9))
+        f6 = tk.LabelFrame(sf, text=" 레퍼런스-본문 구분 기호 ", font=(UI_FONT, 9))
         f6.pack(fill=tk.X, padx=12, pady=4)
         self.sep_var = tk.StringVar(value=self.settings['ref_body_separator'])
         for val, txt in [(' - ', '하이픈 (-)'), (': ', '콜론 (:)'), (' ', '띄어쓰기')]:
             rb = tk.Radiobutton(f6, text=txt, variable=self.sep_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Output mode
-        f7 = tk.LabelFrame(sf, text=" 다절 출력 방식 ", font=('Segoe UI', 9))
+        f7 = tk.LabelFrame(sf, text=" 다절 출력 방식 ", font=(UI_FONT, 9))
         f7.pack(fill=tk.X, padx=12, pady=4)
         self.output_mode_var = tk.StringVar(value=self.settings['output_mode'])
         for val, txt in [('inline', '여러 절을 한 줄로'), ('newline', '각 절을 줄마다')]:
             rb = tk.Radiobutton(f7, text=txt, variable=self.output_mode_var, value=val,
-                                font=('Segoe UI', 9), command=self._on_setting_changed)
+                                font=(UI_FONT, 9), command=self._on_setting_changed)
             rb.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Newline sub-option: show chapter:verse
         self.newline_cv_var = tk.BooleanVar(value=self.settings['newline_show_cv'])
         self.newline_cv_check = tk.Checkbutton(
             f7, text='줄마다 장:절 표시', variable=self.newline_cv_var,
-            font=('Segoe UI', 9), command=self._on_setting_changed)
+            font=(UI_FONT, 9), command=self._on_setting_changed)
         self.newline_cv_check.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Misc checkboxes
-        f8 = tk.LabelFrame(sf, text=" 기타 ", font=('Segoe UI', 9))
+        f8 = tk.LabelFrame(sf, text=" 기타 ", font=(UI_FONT, 9))
         f8.pack(fill=tk.X, padx=12, pady=4)
         self.version_header_var = tk.BooleanVar(value=self.settings['show_version_header'])
         cb1 = tk.Checkbutton(f8, text='버전 헤더 출력', variable=self.version_header_var,
-                             font=('Segoe UI', 9), command=self._on_setting_changed)
+                             font=(UI_FONT, 9), command=self._on_setting_changed)
         cb1.pack(side=tk.LEFT, padx=8, pady=4)
         self.hide_ref_var = tk.BooleanVar(value=self.settings['hide_reference'])
         cb2 = tk.Checkbutton(f8, text='장절 표기 숨기기 (본문만)', variable=self.hide_ref_var,
-                             font=('Segoe UI', 9), command=self._on_setting_changed)
+                             font=(UI_FONT, 9), command=self._on_setting_changed)
         cb2.pack(side=tk.LEFT, padx=8, pady=4)
 
         # Separator
@@ -1574,13 +1597,13 @@ class AutoBibleApp:
         preview_header = tk.Frame(sf)
         preview_header.pack(fill=tk.X, padx=8)
         tk.Label(preview_header, text="미리보기 (예시: 요 1:1-3)",
-                 font=('Segoe UI', 10, 'bold')).pack(side=tk.LEFT)
+                 font=(UI_FONT, 10, 'bold')).pack(side=tk.LEFT)
         self.preview_refresh_btn = tk.Button(
-            preview_header, text="미리보기 새로고침", font=('Segoe UI', 8),
+            preview_header, text="미리보기 새로고침", font=(UI_FONT, 8),
             relief=tk.FLAT, cursor='hand2', command=self._update_preview)
         self.preview_refresh_btn.pack(side=tk.RIGHT)
 
-        self.preview_text = tk.Text(sf, font=('Malgun Gothic', 10), wrap=tk.WORD,
+        self.preview_text = tk.Text(sf, font=(BODY_FONT, 10), wrap=tk.WORD,
                                       height=12, state=tk.DISABLED, padx=8, pady=8)
         self.preview_text.pack(fill=tk.BOTH, expand=True, padx=12, pady=(4, 12))
 
@@ -1806,7 +1829,7 @@ class AutoBibleApp:
         outer = tk.Frame(self.chip_frame, relief=tk.SOLID, borderwidth=1,
                          padx=8, pady=3, cursor='fleur')
         label_text = f"{'☑' if is_checked else '☐'} {name}"
-        lbl = tk.Label(outer, text=label_text, font=('Segoe UI', 9), cursor='fleur')
+        lbl = tk.Label(outer, text=label_text, font=(UI_FONT, 9), cursor='fleur')
         lbl.pack()
         outer.pack(side=tk.LEFT, padx=3, pady=2)
         self.viewer_chip_widgets[name] = outer
@@ -2183,10 +2206,10 @@ class AutoBibleApp:
     def _apply_viewer_font(self):
         size = int(self.settings.get('viewer_font_size', 11))
         num_size = max(8, size - 2)
-        self.viewer_text.configure(font=('Malgun Gothic', size))
-        self.viewer_text.tag_configure('verse_num', font=('Malgun Gothic', num_size, 'bold'))
-        self.viewer_text.tag_configure('highlight', font=('Malgun Gothic', size, 'bold'))
-        self.viewer_text.tag_configure('highlight_num', font=('Malgun Gothic', num_size, 'bold'))
+        self.viewer_text.configure(font=(BODY_FONT, size))
+        self.viewer_text.tag_configure('verse_num', font=(BODY_FONT, num_size, 'bold'))
+        self.viewer_text.tag_configure('highlight', font=(BODY_FONT, size, 'bold'))
+        self.viewer_text.tag_configure('highlight_num', font=(BODY_FONT, num_size, 'bold'))
 
     def _change_font_size(self, delta):
         cur = int(self.settings.get('viewer_font_size', 11))
@@ -2429,7 +2452,7 @@ class AutoBibleApp:
         style.theme_use('clam')
         style.configure('TNotebook', background=t['bg'], borderwidth=0)
         style.configure('TNotebook.Tab', background=t['button_bg'], foreground=t['fg'],
-                        padding=[12, 4], font=('Segoe UI', 9))
+                        padding=[12, 4], font=(UI_FONT, 9))
         style.map('TNotebook.Tab',
                   background=[('selected', t['accent']), ('!selected', t['button_bg'])],
                   foreground=[('selected', '#FFFFFF'), ('!selected', t['fg'])])
@@ -2703,15 +2726,15 @@ class AutoBibleApp:
         banner.pack(fill=tk.X, before=self.top_bar)
         msg = f"새 버전 {info['version']} 사용 가능 (현재 v{__version__})"
         tk.Label(banner, text=msg, bg=bg, fg=fg,
-                 font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, padx=10, pady=4)
+                 font=(UI_FONT, 9, 'bold')).pack(side=tk.LEFT, padx=10, pady=4)
         tk.Button(banner, text=" 지금 업데이트 ", bg=bg, fg=fg,
-                  font=('Segoe UI', 9, 'bold'), relief=tk.FLAT, cursor='hand2',
+                  font=(UI_FONT, 9, 'bold'), relief=tk.FLAT, cursor='hand2',
                   command=self._start_update).pack(side=tk.RIGHT, padx=4, pady=2)
         tk.Button(banner, text=" 나중에 ", bg=bg, fg=fg,
-                  font=('Segoe UI', 9), relief=tk.FLAT, cursor='hand2',
+                  font=(UI_FONT, 9), relief=tk.FLAT, cursor='hand2',
                   command=banner.destroy).pack(side=tk.RIGHT, padx=4, pady=2)
         tk.Button(banner, text=" 이 버전 건너뛰기 ", bg=bg, fg=fg,
-                  font=('Segoe UI', 9), relief=tk.FLAT, cursor='hand2',
+                  font=(UI_FONT, 9), relief=tk.FLAT, cursor='hand2',
                   command=self._skip_current_update).pack(side=tk.RIGHT, padx=4, pady=2)
         self.update_banner = banner
 
@@ -2755,11 +2778,11 @@ class AutoBibleApp:
         except Exception:
             pass
 
-        lbl = tk.Label(win, text=f"v{info['version']} 다운로드 중...", font=('Segoe UI', 10))
+        lbl = tk.Label(win, text=f"v{info['version']} 다운로드 중...", font=(UI_FONT, 10))
         lbl.pack(pady=(20, 8))
         pb = ttk.Progressbar(win, mode='determinate', length=360, maximum=100)
         pb.pack(pady=4)
-        status = tk.Label(win, text="", font=('Segoe UI', 9))
+        status = tk.Label(win, text="", font=(UI_FONT, 9))
         status.pack(pady=4)
 
         def worker():
