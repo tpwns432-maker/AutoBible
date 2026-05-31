@@ -706,7 +706,10 @@ def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000')
 
 class Engine:
     VERSE_PATTERN = re.compile(
-        r'([가-힣a-zA-Z]+\d?[가-힣a-zA-Z]*)'
+        # Book name: letters, with a digit allowed only when followed by more
+        # letters (e.g. 요2서). A trailing digit must NOT be eaten as part of
+        # the name, or "요15:4" would parse as book "요1", chapter 5.
+        r'([가-힣a-zA-Z]+(?:\d[가-힣a-zA-Z]+)*)'
         r'\s*'
         r'(\d+)'
         r'\s*(?:장\s*)?'
@@ -719,7 +722,7 @@ class Engine:
     )
 
     KOREAN_STYLE_PATTERN = re.compile(
-        r'([가-힣]+\d?[가-힣]*)'
+        r'([가-힣]+(?:\d[가-힣]+)*)'
         r'\s*(\d+)\s*장'
         r'(?:\s*(\d+(?:\s*[-~]\s*\d+)?(?:\s*[,，]\s*\d+(?:\s*[-~]\s*\d+)?)*)\s*절?)?'
     )
@@ -1248,8 +1251,14 @@ class BibleClipApp:
         else:
             self.root.geometry('1100x780')
 
-        # Validate output_order
+        # Validate output_order. When empty (fresh install), default to a
+        # Korean version so clipboard monitoring produces output immediately
+        # instead of silently doing nothing.
         valid_order = [n for n in self.settings['output_order'] if n in self.bible_dbs]
+        if not valid_order and self.bible_dbs:
+            versions = list(self.bible_dbs.keys())
+            korean_pref = [v for v in ('KRV', 'NRKV', 'KNRSV') if v in versions]
+            valid_order = [korean_pref[0] if korean_pref else versions[0]]
         self.settings['output_order'] = valid_order
 
         # Validate viewer_versions; default to KRV (or next-best Korean) when empty.
