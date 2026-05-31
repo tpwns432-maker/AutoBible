@@ -88,6 +88,12 @@ jobs:
           MACOS="$APP/Contents/MacOS"
           mkdir -p "$MACOS/bible_versions" && cp bible_versions/KRV.SQLite3 "$MACOS/bible_versions/"
           mkdir -p "$MACOS/original_lang" && cp original_lang/* "$MACOS/original_lang/"
+          # Stamp the real version into Info.plist (PyInstaller leaves 0.0.0)
+          PLIST="$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $V" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $V" "$PLIST"
           # Copying into the bundle invalidated PyInstaller's signature, which
           # makes macOS report the app as "damaged". Re-sign ad-hoc to re-seal.
           codesign --force --deep --sign - "$APP" || echo "codesign failed (continuing)"

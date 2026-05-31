@@ -65,6 +65,16 @@ if [ -d "original_lang" ]; then
   cp original_lang/* "$MACOS/original_lang/" 2>/dev/null || true
 fi
 
+# Stamp the real version into Info.plist (PyInstaller leaves 0.0.0)
+V=$(python3 -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('autobible.py').read()).group(1))" 2>/dev/null || echo "")
+if [ -n "$V" ]; then
+  PLIST="$APP/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$PLIST" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$PLIST" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $V" "$PLIST" 2>/dev/null \
+    || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $V" "$PLIST" 2>/dev/null || true
+fi
+
 # Copying into the bundle invalidated the signature; re-sign ad-hoc so macOS
 # doesn't report the app as "damaged".
 echo "==> Re-signing (ad-hoc) AutoBible.app"

@@ -25,7 +25,7 @@ try:
 except Exception:
     _certifi = None
 
-__version__ = "1.2.6"
+__version__ = "1.2.7"
 
 IS_WINDOWS = sys.platform.startswith('win')
 
@@ -84,6 +84,10 @@ def system_env():
             env[var] = orig
         else:
             env.pop(var, None)
+    # A .app launched from Finder has no LANG, so pbpaste emits '?' for Korean.
+    # Force a UTF-8 locale so non-ASCII text round-trips correctly.
+    env['LANG'] = 'en_US.UTF-8'
+    env['LC_ALL'] = 'en_US.UTF-8'
     return env
 
 BASE_DIR = get_base_dir()
