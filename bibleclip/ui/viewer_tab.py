@@ -92,86 +92,88 @@ class ViewerTabMixin:
         self.viewer_chip_labels = {}   # name -> inner Label
         self._render_viewer_versions()
 
-        # Navigation
-        nav = tk.Frame(self.tab_viewer)
-        nav.pack(fill=tk.X, padx=4, pady=(4, 0))
+        # Navigation card
+        nav = ctk.CTkFrame(self.tab_viewer, fg_color=CTK['card'], corner_radius=12,
+                           bg_color=CTK['app_bg'])
+        nav.pack(fill=tk.X, padx=14, pady=(2, 6))
         self.nav_frame = nav
 
-        tk.Label(nav, text="책:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
+        BTN = dict(corner_radius=8, height=30, fg_color=CTK['btn'],
+                   hover_color=CTK['btn_hover'], text_color=CTK['btn_text'],
+                   font=(UI_FONT, 11))
+        LBL = dict(font=(UI_FONT, 11), text_color=CTK['muted'])
+        ENT = dict(height=30, corner_radius=8, fg_color=CTK['app_bg'],
+                   border_color=CTK['card_border'], text_color=CTK['text'],
+                   font=(UI_FONT, 11))
+        OPT = dict(height=30, corner_radius=8, fg_color=CTK['btn'],
+                   button_color=CTK['accent'], button_hover_color=CTK['accent_hover'],
+                   text_color=CTK['btn_text'], dropdown_fg_color=CTK['card'],
+                   dropdown_text_color=CTK['text'], dropdown_hover_color=CTK['btn'],
+                   font=(UI_FONT, 11))
+
+        ctk.CTkLabel(nav, text="책", **LBL).pack(side=tk.LEFT, padx=(14, 4), pady=8)
         self.book_var = tk.StringVar()
-        self.book_combo = ttk.Combobox(nav, textvariable=self.book_var,
-                                        state='readonly', width=14)
-        self.book_combo.pack(side=tk.LEFT, padx=(0, 8))
-        self.book_combo.bind('<<ComboboxSelected>>', self._on_book_changed)
+        self.book_combo = ctk.CTkOptionMenu(nav, variable=self.book_var, width=150,
+                                            command=self._on_book_changed, **OPT)
+        self.book_combo.pack(side=tk.LEFT, padx=(0, 10), pady=8)
 
-        tk.Label(nav, text="장:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
+        ctk.CTkLabel(nav, text="장", **LBL).pack(side=tk.LEFT, padx=(0, 4))
         self.chapter_var = tk.StringVar()
-        self.chapter_combo = ttk.Combobox(nav, textvariable=self.chapter_var,
-                                            state='readonly', width=5)
-        self.chapter_combo.pack(side=tk.LEFT, padx=(0, 8))
-        self.chapter_combo.bind('<<ComboboxSelected>>', self._on_chapter_changed)
+        self.chapter_combo = ctk.CTkOptionMenu(nav, variable=self.chapter_var, width=74,
+                                               command=self._on_chapter_changed, **OPT)
+        self.chapter_combo.pack(side=tk.LEFT, padx=(0, 6))
 
-        self.prev_btn = tk.Button(nav, text=" < ", font=(UI_FONT, 9),
-                                    relief=tk.FLAT, cursor='hand2', command=self._prev_chapter)
+        self.prev_btn = ctk.CTkButton(nav, text="‹", width=32,
+                                      command=self._prev_chapter, **BTN)
         self.prev_btn.pack(side=tk.LEFT, padx=2)
-        self.next_btn = tk.Button(nav, text=" > ", font=(UI_FONT, 9),
-                                    relief=tk.FLAT, cursor='hand2', command=self._next_chapter)
+        self.next_btn = ctk.CTkButton(nav, text="›", width=32,
+                                      command=self._next_chapter, **BTN)
         self.next_btn.pack(side=tk.LEFT, padx=2)
 
-        tk.Label(nav, text="절:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(12, 4))
+        ctk.CTkLabel(nav, text="절", **LBL).pack(side=tk.LEFT, padx=(12, 4))
         self.verse_jump_var = tk.StringVar()
-        self.verse_jump_entry = tk.Entry(nav, textvariable=self.verse_jump_var,
-                                           width=5, font=(UI_FONT, 9))
+        self.verse_jump_entry = ctk.CTkEntry(nav, textvariable=self.verse_jump_var,
+                                             width=54, **ENT)
         self.verse_jump_entry.pack(side=tk.LEFT, padx=(0, 4))
         self.verse_jump_entry.bind('<Return>', self._on_verse_jump)
-        self.jump_btn = tk.Button(nav, text="이동", font=(UI_FONT, 9),
-                                    relief=tk.FLAT, cursor='hand2',
-                                    command=lambda: self._on_verse_jump(None))
+        self.jump_btn = ctk.CTkButton(nav, text="이동", width=48,
+                                      command=lambda: self._on_verse_jump(None), **BTN)
         self.jump_btn.pack(side=tk.LEFT)
 
         # Keyword search ( "#태초에" or just "태초에" )
-        self.search_label = tk.Label(nav, text="검색:", font=(UI_FONT, 9))
-        self.search_label.pack(side=tk.LEFT, padx=(14, 4))
+        ctk.CTkLabel(nav, text="검색", **LBL).pack(side=tk.LEFT, padx=(14, 4))
         self.search_var = tk.StringVar()
-        self.search_entry = tk.Entry(nav, textvariable=self.search_var,
-                                     width=12, font=(UI_FONT, 9))
+        self.search_entry = ctk.CTkEntry(nav, textvariable=self.search_var, width=120,
+                                         placeholder_text="#키워드", **ENT)
         self.search_entry.pack(side=tk.LEFT, padx=(0, 4))
         self.search_entry.bind('<Return>', self._on_search_box)
-        self.search_btn = tk.Button(nav, text="검색", font=(UI_FONT, 9),
-                                    relief=tk.FLAT, cursor='hand2',
-                                    command=lambda: self._on_search_box(None))
+        self.search_btn = ctk.CTkButton(nav, text="검색", width=48,
+                                        command=lambda: self._on_search_box(None), **BTN)
         self.search_btn.pack(side=tk.LEFT)
 
         # Font size controls (rightmost)
-        self.font_plus_btn = tk.Button(nav, text=" A+ ", font=(UI_FONT, 9),
-                                         relief=tk.FLAT, cursor='hand2',
-                                         command=lambda: self._change_font_size(1))
-        self.font_plus_btn.pack(side=tk.RIGHT, padx=2)
-        self.font_minus_btn = tk.Button(nav, text=" A- ", font=(UI_FONT, 9),
-                                          relief=tk.FLAT, cursor='hand2',
-                                          command=lambda: self._change_font_size(-1))
+        self.font_plus_btn = ctk.CTkButton(nav, text="A+", width=40,
+                                           command=lambda: self._change_font_size(1), **BTN)
+        self.font_plus_btn.pack(side=tk.RIGHT, padx=(2, 14))
+        self.font_minus_btn = ctk.CTkButton(nav, text="A−", width=40,
+                                            command=lambda: self._change_font_size(-1), **BTN)
         self.font_minus_btn.pack(side=tk.RIGHT, padx=2)
 
-        # Dictionary language toggle (right side, before font buttons in pack order
-        # so visually it appears to the left of A-/A+ since side=RIGHT stacks RTL)
+        # Dictionary language toggle (segmented). side=RIGHT stacks RTL, so the
+        # "사전" label is packed last to sit to the left of the toggle.
         has_ko = self.lexicon_ko is not None
         has_en = self.lexicon_en is not None
         default_lang = 'ko' if has_ko else 'en'
         self.lex_lang_var = tk.StringVar(value=default_lang)
-        self.lex_lang_en_rb = tk.Radiobutton(
-            nav, text='영어', variable=self.lex_lang_var, value='en',
-            font=(UI_FONT, 9),
-            state=(tk.NORMAL if has_en else tk.DISABLED),
-            command=self._on_lex_lang_changed)
-        self.lex_lang_en_rb.pack(side=tk.RIGHT)
-        self.lex_lang_ko_rb = tk.Radiobutton(
-            nav, text='한글', variable=self.lex_lang_var, value='ko',
-            font=(UI_FONT, 9),
-            state=(tk.NORMAL if has_ko else tk.DISABLED),
-            command=self._on_lex_lang_changed)
-        self.lex_lang_ko_rb.pack(side=tk.RIGHT)
-        self.lex_lang_label = tk.Label(nav, text="사전:", font=(UI_FONT, 9))
-        self.lex_lang_label.pack(side=tk.RIGHT, padx=(8, 4))
+        self.lex_lang_seg = ctk.CTkSegmentedButton(
+            nav, values=["한글", "영어"], command=self._on_lex_lang_seg,
+            height=30, corner_radius=8, font=(UI_FONT, 11),
+            fg_color=CTK['btn'], selected_color=CTK['accent'],
+            selected_hover_color=CTK['accent_hover'], unselected_color=CTK['btn'],
+            unselected_hover_color=CTK['btn_hover'], text_color=CTK['btn_text'])
+        self.lex_lang_seg.set("한글" if default_lang == 'ko' else "영어")
+        self.lex_lang_seg.pack(side=tk.RIGHT, padx=(0, 10))
+        ctk.CTkLabel(nav, text="사전", **LBL).pack(side=tk.RIGHT, padx=(8, 4))
 
         # Main vertical PanedWindow: 3-panel area (top) + activity log (bottom)
         vpw = tk.PanedWindow(self.tab_viewer, orient=tk.VERTICAL, sashwidth=8,

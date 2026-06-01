@@ -250,6 +250,11 @@ class LexiconMixin:
                 pass
             self._tip = None
 
+    def _on_lex_lang_seg(self, value):
+        """Segmented dict-language toggle ('한글'/'영어') → lex_lang_var ('ko'/'en')."""
+        self.lex_lang_var.set('ko' if value == '한글' else 'en')
+        self._on_lex_lang_changed()
+
     def _on_lex_lang_changed(self):
         if self._current_lex_code:
             self._show_lex_entry(self._current_lex_code,

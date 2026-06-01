@@ -123,22 +123,8 @@ class ThemeMixin:
             elif isinstance(w, tk.Frame):
                 w.configure(bg=t['bg'])
         self._apply_viewer_chip_theme()
-        self.nav_frame.configure(bg=t['bg'])
-        for w in self.nav_frame.winfo_children():
-            if isinstance(w, tk.Label):
-                w.configure(bg=t['bg'], fg=t['fg'])
-        self._style_button(self.prev_btn)
-        self._style_button(self.next_btn)
-        self._style_button(self.jump_btn)
-        self._style_button(self.search_btn)
-        self._style_button(self.font_plus_btn)
-        self._style_button(self.font_minus_btn)
-        self.search_label.configure(bg=t['bg'], fg=t['fg'])
-        for ent in (self.verse_jump_entry, self.search_entry):
-            ent.configure(bg=t['entry_bg'], fg=t['entry_fg'],
-                          insertbackground=t['fg'],
-                          highlightthickness=1, highlightcolor=t['accent'],
-                          highlightbackground=t['border'])
+        # nav is a CTk card with CTk controls (option menus, buttons, entries,
+        # segmented dict toggle) — all auto-skin via appearance mode.
         # viewer_text_frame is a CTk card (auto-skin)
         sel_bg, sel_fg = t['select_bg'], t['select_fg']
         self.viewer_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
@@ -220,14 +206,8 @@ class ThemeMixin:
         self.preview_text.configure(bg=t['preview_bg'], fg=t['preview_fg'],
                                       insertbackground=t['fg'])
 
-        # --- Lexicon panels inside viewer tab + dict language toggle ---
-        if hasattr(self, 'lex_lang_label'):
-            self.lex_lang_label.configure(bg=t['bg'], fg=t['fg'])
-            for rb in (self.lex_lang_ko_rb, self.lex_lang_en_rb):
-                rb.configure(bg=t['bg'], fg=t['fg'],
-                             selectcolor=t['radio_sel'],
-                             activebackground=t['bg'], activeforeground=t['fg'],
-                             highlightthickness=0)
+        # --- Lexicon panels inside viewer tab ---
+        # dict language toggle is a CTkSegmentedButton (auto-skin)
         if hasattr(self, 'viewer_hpane'):
             self.viewer_hpane.configure(bg=t['bg'], sashrelief=tk.FLAT)
         if hasattr(self, 'lex_mid_text'):

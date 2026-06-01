@@ -304,13 +304,13 @@ class ViewerOpsMixin:
     def _populate_books(self):
         primary = self._get_primary_version()
         if not primary or primary not in self.bible_dbs:
-            self.book_combo['values'] = []
+            self.book_combo.configure(values=[])
             self._book_number_map = {}
             return
         db = self.bible_dbs[primary]
         book_names = [f"{long_} ({short})" for bn, short, long_ in db.book_list]
         self._book_number_map = {f"{long_} ({short})": bn for bn, short, long_ in db.book_list}
-        self.book_combo['values'] = book_names
+        self.book_combo.configure(values=book_names)
         current = self.book_var.get()
         if current in book_names:
             return
@@ -328,11 +328,11 @@ class ViewerOpsMixin:
             if bn in db.books:
                 short, long_ = db.books[bn]
                 target = f"{long_} ({short})"
-                if target in (self.book_combo['values'] or []):
+                if target in (self.book_combo.cget('values') or []):
                     self.book_var.set(target)
                     chapters = db.get_chapters(bn)
-                    self.chapter_combo['values'] = [str(c) for c in chapters]
-                    if chap and str(chap) in self.chapter_combo['values']:
+                    self.chapter_combo.configure(values=[str(c) for c in chapters])
+                    if chap and str(chap) in self.chapter_combo.cget('values'):
                         self.chapter_var.set(str(chap))
                     elif chapters:
                         self.chapter_var.set(str(chapters[0]))
@@ -402,9 +402,9 @@ class ViewerOpsMixin:
             return
         db = self.bible_dbs[primary]
         chapters = db.get_chapters(bn)
-        self.chapter_combo['values'] = [str(c) for c in chapters]
+        self.chapter_combo.configure(values=[str(c) for c in chapters])
         current_chap = self.chapter_var.get()
-        if current_chap and current_chap in self.chapter_combo['values']:
+        if current_chap and current_chap in self.chapter_combo.cget('values'):
             self._load_chapter()
         elif chapters:
             self.chapter_var.set(str(chapters[0]))
