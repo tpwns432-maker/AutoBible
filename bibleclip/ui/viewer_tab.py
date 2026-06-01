@@ -188,7 +188,11 @@ class ViewerTabMixin:
         self.viewer_hpane = hpw
 
         def _card(parent, title, minsize):
+            # bg_color = app bg so the rounded-corner notches blend with the
+            # PanedWindow background (otherwise CTk fills them with a mismatched
+            # color since the tk.PanedWindow parent isn't a CTk widget).
             card = ctk.CTkFrame(parent, fg_color=CTK['card'], corner_radius=14,
+                                bg_color=CTK['app_bg'],
                                 border_width=1, border_color=CTK['card_border'])
             parent.add(card, minsize=minsize, stretch="always")
             card.grid_columnconfigure(0, weight=1)
@@ -245,6 +249,7 @@ class ViewerTabMixin:
 
         # Bottom: activity log card spanning the full width
         logcard = ctk.CTkFrame(vpw, fg_color=CTK['card'], corner_radius=14,
+                               bg_color=CTK['app_bg'],
                                border_width=1, border_color=CTK['card_border'])
         vpw.add(logcard, minsize=92, stretch="never")
         self.log_frame = logcard
