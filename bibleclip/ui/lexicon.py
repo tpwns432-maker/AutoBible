@@ -63,7 +63,8 @@ from bibleclip.core.formatter import Formatter
 
 class LexiconMixin:
     def _on_main_activate(self, event=None):
-        """Main window came forward → the open dict popups are now behind it."""
+        """Main window came forward → the open dict popups are now behind it.
+        Non-Windows fallback only; on Windows the real z-order is read at close."""
         if event is not None and event.widget is not self.root:
             return
         if getattr(self, '_closing_popup', False):
@@ -73,6 +74,35 @@ class LexiconMixin:
                 p._above_main = False
             except Exception:
                 pass
+
+    # ---- Win32 z-order query (replaces the flaky <Activate> tracking) ----
+
+    def _win_zorder_map(self):
+        """{HWND: z-index} for every top-level window, 0 = frontmost.
+        EnumWindows enumerates top-level windows in z-order (top → bottom)."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        order = []
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND,
+                                         wintypes.LPARAM)
+
+        def _cb(hwnd, lparam):
+            order.append(hwnd)
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(_cb), 0)
+        return {h: i for i, h in enumerate(order)}
+
+    def _win_root_hwnd(self, win):
+        """Top-level (title-bar) HWND owning a Tk window."""
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+        GA_ROOT = 2
+        return user32.GetAncestor(win.winfo_id(), GA_ROOT)
 
     def _render_lex_middle(self, our_bn, chapter):
         text = self.lex_mid_text
@@ -345,14 +375,15 @@ class LexiconMixin:
         render_dict_html(txt, body, fg=t['viewer_fg'], num_color=t['accent'])
 
         self._lex_popups.append(top)
-        # Track whether this popup is above or behind the main window. A popup
-        # starts above; clicking the main window pushes them behind; clicking a
-        # popup brings it above again.
+        # On non-Windows we approximate "is this popup above main?" with <Activate>
+        # events (see _on_main_activate). On Windows we read the true OS z-order at
+        # close time instead, so this flaky tracking is skipped entirely.
         top._above_main = True
-        top.bind('<Activate>', lambda e, w=top: setattr(w, '_above_main', True))
-        if not getattr(self, '_main_activate_bound', False):
-            self.root.bind('<Activate>', self._on_main_activate, add='+')
-            self._main_activate_bound = True
+        if not IS_WINDOWS:
+            top.bind('<Activate>', lambda e, w=top: setattr(w, '_above_main', True))
+            if not getattr(self, '_main_activate_bound', False):
+                self.root.bind('<Activate>', self._on_main_activate, add='+')
+                self._main_activate_bound = True
 
         def on_close():
             try:
@@ -365,13 +396,32 @@ class LexiconMixin:
                 self._lex_popups.remove(top)
             except ValueError:
                 pass
-            # Re-raise ONLY the popups that were above the main window; leave the
-            # ones the user pushed behind main where they are. Snapshot before
-            # destroy, and set a flag so the activation the close triggers on the
-            # main window doesn't wrongly mark everything as "behind".
-            above = [p for p in self._lex_popups if getattr(p, '_above_main', True)]
-            self._closing_popup = True
-            top.destroy()
+            # Re-raise ONLY the popups that sit above the main window; leave the
+            # ones the user pushed behind main where they are.
+            if IS_WINDOWS:
+                # Read the real z-order BEFORE destroying — destroy() perturbs the
+                # stack and triggers a main-window activation.
+                try:
+                    zmap = self._win_zorder_map()
+                    main_z = zmap.get(self._win_root_hwnd(self.root), 1 << 30)
+                    ranked = [(zmap.get(self._win_root_hwnd(p), 1 << 30), p)
+                              for p in self._lex_popups]
+                    # bottom-most first so the final lift lands the true top on top
+                    above = [p for z, p in sorted(ranked, key=lambda zp: zp[0],
+                                                  reverse=True) if z < main_z]
+                except Exception:
+                    above = list(self._lex_popups)
+                top.destroy()
+            else:
+                # Snapshot before destroy; flag so the activation the close fires
+                # on main doesn't wrongly mark everything "behind".
+                above = [p for p in self._lex_popups
+                         if getattr(p, '_above_main', True)]
+                self._closing_popup = True
+                top.destroy()
+                self.root.after(250,
+                                lambda: setattr(self, '_closing_popup', False))
+
             for p in above:
                 try:
                     p.lift()
@@ -382,7 +432,6 @@ class LexiconMixin:
                     above[-1].focus_set()
                 except Exception:
                     pass
-            self.root.after(250, lambda: setattr(self, '_closing_popup', False))
 
         top.protocol("WM_DELETE_WINDOW", on_close)
         top.bind('<Escape>', lambda e: on_close())
