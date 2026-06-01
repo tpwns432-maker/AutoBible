@@ -188,6 +188,7 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - 빌드 스크립트 `packaging/build_web.ps1`: `python -m PyInstaller --onedir --windowed --collect-submodules bibleclip --add-data "web;web" --icon=icon.ico --name BibleClipWeb --distpath dist_web --workpath build_web bibleclip_web.py` + 데이터 폴더(bible_versions/original_lang/icon) exe 옆 복사.
 - pywebview는 자체 PyInstaller 훅(`webview/__pyinstaller/hook-webview.py`)으로 WebView2 백엔드 수집, pythonnet도 `hook-clr.py` 자동 → 별도 `--collect-all` 불필요. `web/`(폰트 포함)는 `_internal/web/`에 번들, 런타임은 `config.get_resource_dir()`=`sys._MEIPASS`로 해석.
 - **검증**: 로컬 `dist_web\BibleClipWeb\BibleClipWeb.exe` 정상 기동·렌더(폰트 포함)·전 기능 동작 사용자 확인. `.gitignore`에 `build_web/`·`dist_web/` 추가(산출물 미추적).
-- **남은 5 항목**: ⬜ 업데이트 **인앱 설치** 연결(`updater_ui` 다운로드+.bat 교체+재시작을 웹 frozen 레이아웃에 맞춰 이식; 이제 레이아웃 확보됨) · ⬜ **CI 워크플로에 웹 빌드 잡 추가**(현재 build.yml은 CTk만; 웹은 별도 아티팩트 or 전환 결정) · ⬜ macOS 빌드(`web:web`, .app) · 코드서명.
+- ✅ **CI 웹 빌드 잡**(`build-web-windows`): build.yml에 추가. `BibleClipWeb-windows-vX.zip`을 **업로드 아티팩트로만**(release 잡에 미포함, `needs`에도 없음 → 웹 빌드 실패해도 CTk 릴리스 무영향). 자산명 "BibleClipWeb"로 CTk "BibleClip-windows"와 구분(자산 선택 충돌 방지). 아티팩트 받으려면 브랜치 push 후 workflow_dispatch 실행 필요. (참고: 아직 실사용자 배포 전이라 충돌 위험은 실질적으로 낮음 — 사용자 확인.)
+- **남은 5 항목**: ⬜ 업데이트 **인앱 설치** 연결(`updater_ui` 다운로드+.bat 교체+재시작을 웹 frozen 레이아웃에 맞춰 이식; **실제 웹 릴리스 zip이 있어야 끝까지 테스트** 가능 → CI 아티팩트 먼저) · ⬜ macOS 웹 빌드(`web:web`, .app) · 코드서명.
 
 **병행 전략 현황:** main=CTk v1.5.3 배포 중. 웹은 `feat/web-engine-facade`(미머지, 다수 커밋). 기능 동등+패키징 안정 시 전환 결정.

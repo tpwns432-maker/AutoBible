@@ -50,6 +50,45 @@ jobs:
           path: BibleClip-windows-*.zip
 
   # -------------------------------------------------------------------
+  # Web UI (pywebview/WebView2) — BETA. Built as a downloadable workflow
+  # artifact only; deliberately NOT attached to the public release (the
+  # shipping app is still CustomTkinter). Asset name carries "BibleClipWeb"
+  # so it can never be confused with the CTk "BibleClip-windows" zip.
+  build-web-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter pywebview pythonnet
+
+      - name: Build BibleClipWeb.exe
+        run: >
+          python -m PyInstaller --onedir --windowed --noconfirm --clean
+          --collect-submodules bibleclip --add-data "web;web"
+          --icon=icon.ico --name BibleClipWeb bibleclip_web.py
+
+      - name: Assemble package
+        shell: pwsh
+        run: |
+          $v = ([regex]::Match((Get-Content bibleclip/_version.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
+          Copy-Item icon.ico dist/BibleClipWeb/ -Force
+          New-Item -ItemType Directory -Force dist/BibleClipWeb/bible_versions | Out-Null
+          Copy-Item bible_versions/KRV.SQLite3 dist/BibleClipWeb/bible_versions/ -Force
+          New-Item -ItemType Directory -Force dist/BibleClipWeb/original_lang | Out-Null
+          Copy-Item original_lang/* dist/BibleClipWeb/original_lang/ -Force
+          Compress-Archive -Path dist/BibleClipWeb/* -DestinationPath "BibleClipWeb-windows-v$v.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-windows-beta
+          path: BibleClipWeb-windows-*.zip
+
+  # -------------------------------------------------------------------
   build-macos:
     runs-on: macos-latest
     steps:
