@@ -133,6 +133,36 @@ def main():
         assert kept == picked, kept
         print(f"set_viewer_versions -> {picked} (empty rejected)")
 
+    # ---- Output settings tab (get_settings / set_setting / order / preview) ----
+    # save_settings is still the stub from above (no disk writes).
+    gs = api.get_settings()
+    assert set(gs['format']) == set(Api._FORMAT_KEYS), gs['format'].keys()
+    assert isinstance(gs['output_order'], list)
+    assert gs['versions'], "no versions in get_settings"
+
+    # enum: valid accepted, invalid rejected
+    assert api.set_setting('chapter_verse_format', 'korean')['ok']
+    assert api.lib.settings['chapter_verse_format'] == 'korean'
+    assert not api.set_setting('chapter_verse_format', 'bogus')['ok']
+    assert not api.set_setting('no_such_key', 'x')['ok']
+    # bool coercion
+    assert api.set_setting('hide_reference', 1)['ok']
+    assert api.lib.settings['hide_reference'] is True
+
+    # output order: filter bogus, dedup, preserve given order
+    picked = api.set_output_order([all_names[0], 'BOGUS', all_names[0]])
+    assert picked == [all_names[0]], picked
+    print(f"get_settings/set_setting/order OK -> order={picked}")
+
+    # preview reflects the current order (요 1:1-3 → John 1:1-3 text)
+    api.set_output_order([all_names[0]])
+    prev = api.get_preview()
+    assert prev and '(' != prev[0], f"preview empty/placeholder: {prev!r}"
+    print(f"get_preview -> {prev[:32]}…")
+    # empty order → placeholder, not a crash
+    api.set_output_order([])
+    assert api.get_preview() == '(출력할 성경 버전을 추가하세요)', api.get_preview()
+
     # markup converter unit checks
     assert markup_to_html('<num>H1</num> a^b') == '<span class="lex-num" data-code="H1">H1</span> a  b'
     assert markup_to_html('') == ''

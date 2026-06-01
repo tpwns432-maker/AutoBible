@@ -152,4 +152,11 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - **검증**: `tests/test_webui_api.py` — `get_initial.viewer` + `set_viewer_versions`(검증·정렬·빈 거부, **save_settings 스텁**으로 사용자 설정 미오염). 사용자 실창 OK.
 - **다음 후보(사용자 합의로 보류)**: 칩 **드래그&드롭 순서 조정**(CTk엔 있음; 현재 웹은 `viewer_version_order` 고정 순서).
 
-**남은 Phase:** 3c 출력설정 탭 + 검색 패널 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 3c — 출력 설정 탭 (✅ 완료, 사용자 실창 검증):**
+- `webui/api.py`: `get_settings`(format 10키+output_order+versions), `set_setting(key,value)`(화이트리스트 `_FORMAT_KEYS`: enum 값검증/bool 강제, save), `set_output_order(names)`(dbs 필터·dedup·순서 유지, save), `get_preview()`(`build_output('요 1:1-3')` 결과 텍스트 = 실제 복사물).
+- `web/`: 상단 탭 `#tab-seg`(성경 보기/출력 설정)이 `#viewer-view`↔`#settings-view` 전환 + `#viewer-controls` 숨김. 설정뷰는 lazy 로드. **표기 설정**(7개 세그 + 토글 3개), **출력 순서**(↑↓✕ + ＋역본추가 메뉴), **미리보기**(요 1:1-3, 변경 즉시 갱신). 포맷 행은 JS config(`FORMAT_ROWS`/`TOGGLE_ROWS`)로 렌더(구분기호 `' '` 값이 HTML 속성 인코딩에 안 깨지게).
+- ⚠️ CSS: 전역 `[hidden]{display:none !important}` 추가 — `.panels`/`.drawer` 등 display 규칙이 `[hidden]`을 이기던 문제 일괄 해결.
+- **검증**: `tests/test_webui_api.py` — get_settings/set_setting(enum·bool·미지키)/set_output_order(필터·dedup)/get_preview(실데이터·빈순서 플레이스홀더), **save_settings 스텁**. 사용자 실창 OK(탭 전환·미리보기·순서·모니터 반영).
+- **다음 후보(사용자 요청)**: 출력 순서 ↑↓ 시 **두 행 스왑 애니메이션**(변경을 시각적으로 명확히).
+
+**남은 Phase:** 3d 검색 패널 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)

@@ -59,32 +59,35 @@
 
     <!-- Controls -->
     <div class="controls">
-      <div class="seg" data-seg="tab">
-        <div class="opt on">성경 보기</div>
-        <div class="opt">출력 설정</div>
+      <div class="seg" id="tab-seg" data-seg="tab">
+        <div class="opt on" data-tab="viewer">성경 보기</div>
+        <div class="opt" data-tab="settings">출력 설정</div>
       </div>
-      <!-- Only the versions currently in use show as chips (rendered live into
-           #ver-chips); the rest live behind the "+" (역본 추가·관리). The first
-           chip is the primary version — it drives the book/chapter pickers and
-           the original-language panel. Clicking a chip removes it. -->
-      <span class="ver-chips" id="ver-chips"><span class="pill sel">KRV</span></span>
-      <span class="pill add" id="ver-add" title="역본 추가·관리">＋</span>
-      <span class="vsep"></span>
-      <span class="pill dropdown" id="book-pill">여호수아</span>
-      <span class="pill dropdown" id="chapter-pill">1장</span>
-      <span class="mini" id="prev-ch" title="이전 장">‹</span>
-      <span class="mini" id="next-ch" title="다음 장">›</span>
-      <span class="spacer"></span>
-      <div class="seg" data-seg="lang">
-        <div class="opt on">한글</div>
-        <div class="opt">영어</div>
-      </div>
-      <span class="mini" title="글자 작게">A−</span>
-      <span class="mini" title="글자 크게">A+</span>
+      <!-- Viewer-only controls; hidden while the 출력 설정 tab is active. -->
+      <span class="viewer-controls" id="viewer-controls">
+        <!-- Only the versions currently in use show as chips (rendered live into
+             #ver-chips); the rest live behind the "+" (역본 추가·관리). The first
+             chip is the primary version — it drives the book/chapter pickers and
+             the original-language panel. Clicking a chip removes it. -->
+        <span class="ver-chips" id="ver-chips"><span class="pill sel">KRV</span></span>
+        <span class="pill add" id="ver-add" title="역본 추가·관리">＋</span>
+        <span class="vsep"></span>
+        <span class="pill dropdown" id="book-pill">여호수아</span>
+        <span class="pill dropdown" id="chapter-pill">1장</span>
+        <span class="mini" id="prev-ch" title="이전 장">‹</span>
+        <span class="mini" id="next-ch" title="다음 장">›</span>
+        <span class="spacer"></span>
+        <div class="seg" data-seg="lang">
+          <div class="opt on">한글</div>
+          <div class="opt">영어</div>
+        </div>
+        <span class="mini" title="글자 작게">A−</span>
+        <span class="mini" title="글자 크게">A+</span>
+      </span>
     </div>
 
     <!-- Three panels -->
-    <div class="panels">
+    <div class="panels" id="viewer-view">
 
       <!-- Scripture -->
       <section class="card">
@@ -122,6 +125,27 @@
         </div>
       </section>
 
+    </div>
+
+    <!-- Output-settings view (출력 설정 탭). Format rows + output order are
+         rendered live by app.js; the preview shows what a caught reference
+         would put on the clipboard. -->
+    <div class="settings-view" id="settings-view" hidden>
+      <section class="card set-card">
+        <div class="card-head">표기 설정 · 한국어 역본</div>
+        <div class="card-body">
+          <p class="set-note">※ 영어 역본(ESV/NKJV 등)은 항상 영어식+하이픈으로 출력됩니다.</p>
+          <div id="set-format"></div>
+        </div>
+      </section>
+      <section class="card set-card">
+        <div class="card-head">출력 순서 · 복사에 사용할 역본</div>
+        <div class="card-body" id="set-order"></div>
+      </section>
+      <section class="card set-card">
+        <div class="card-head">미리보기 · 요 1:1-3</div>
+        <div class="card-body"><pre class="preview" id="set-preview">…</pre></div>
+      </section>
     </div>
   </div>
 

@@ -154,6 +154,7 @@
     await loadChapter();
     wireControls();
     wireMonitor();
+    wireTabs();
   }
 
   function bookName(num) {
@@ -399,6 +400,186 @@
         toast(`키워드 "${keyword}" — 검색 기능 준비 중`);
       },
     };
+  }
+
+  // ---- Output settings tab (출력 설정) ----
+
+  const FORMAT_ROWS = [
+    { key: "book_name", label: "책 이름",
+      opts: [["long_ko", "한글 정식"], ["short_ko", "한글 약칭"], ["long_en", "영문 정식"], ["short_en", "영문 약칭"]] },
+    { key: "chapter_verse_format", label: "장절 표기",
+      opts: [["colon", "1:1"], ["korean", "1장 1절"]] },
+    { key: "bracket_style", label: "괄호",
+      opts: [["none", "없음"], ["[]", "[ ]"], ["()", "( )"]] },
+    { key: "ref_position", label: "표기 위치",
+      opts: [["before", "본문 앞"], ["after", "본문 뒤"]] },
+    { key: "range_symbol", label: "범위 기호",
+      opts: [["-", "-"], ["~", "~"]] },
+    { key: "ref_body_separator", label: "구분 기호",
+      opts: [[" - ", "하이픈"], [": ", "콜론"], [" ", "띄어쓰기"]] },
+    { key: "output_mode", label: "출력 방식",
+      opts: [["inline", "한 줄로"], ["newline", "줄마다"]] },
+  ];
+  const TOGGLE_ROWS = [
+    { key: "newline_show_cv", label: "줄마다 장:절 표시" },
+    { key: "show_version_header", label: "버전 헤더 출력" },
+    { key: "hide_reference", label: "장절 표기 숨기기 (본문만)" },
+  ];
+
+  let settingsLoaded = false;
+  let setState = null; // {format:{...}, output_order:[...], versions:[...]}
+
+  function dispOf(name) {
+    const v = (setState.versions || []).find((x) => x.name === name);
+    return v ? v.display : "";
+  }
+
+  async function refreshPreview() {
+    const pre = $("set-preview");
+    if (pre) pre.textContent = await api().get_preview();
+  }
+
+  function renderFormat() {
+    const host = $("set-format");
+    host.innerHTML = "";
+    FORMAT_ROWS.forEach((row) => {
+      const r = document.createElement("div");
+      r.className = "set-row";
+      const lab = document.createElement("span");
+      lab.className = "set-label";
+      lab.textContent = row.label;
+      const seg = document.createElement("div");
+      seg.className = "seg";
+      row.opts.forEach(([val, label]) => {
+        const opt = document.createElement("div");
+        opt.className = "opt" + (setState.format[row.key] === val ? " on" : "");
+        opt.textContent = label;
+        opt.addEventListener("click", async () => {
+          seg.querySelectorAll(".opt").forEach((o) => o.classList.remove("on"));
+          opt.classList.add("on");
+          setState.format[row.key] = val;
+          await api().set_setting(row.key, val);
+          refreshPreview();
+        });
+        seg.appendChild(opt);
+      });
+      r.appendChild(lab);
+      r.appendChild(seg);
+      host.appendChild(r);
+    });
+    TOGGLE_ROWS.forEach((row) => {
+      const t = document.createElement("div");
+      t.className = "set-toggle";
+      const lab = document.createElement("span");
+      lab.className = "set-label";
+      lab.textContent = row.label;
+      const sw = document.createElement("span");
+      sw.className = "switch" + (setState.format[row.key] ? " on" : "");
+      sw.innerHTML = `<span class="knob"></span>`;
+      t.appendChild(lab);
+      t.appendChild(sw);
+      t.addEventListener("click", async () => {
+        const next = !setState.format[row.key];
+        setState.format[row.key] = next;
+        sw.classList.toggle("on", next);
+        await api().set_setting(row.key, next);
+        refreshPreview();
+      });
+      host.appendChild(t);
+    });
+  }
+
+  function orderBtn(txt, disabled, fn) {
+    const b = document.createElement("button");
+    b.className = "order-btn";
+    b.textContent = txt;
+    b.title = txt;
+    if (disabled) b.disabled = true;
+    else b.addEventListener("click", fn);
+    return b;
+  }
+
+  async function commitOrder(next) {
+    setState.output_order = await api().set_output_order(next);
+    renderOrder();
+    refreshPreview();
+  }
+
+  function renderOrder() {
+    const host = $("set-order");
+    host.innerHTML = "";
+    const order = setState.output_order;
+    if (!order.length) {
+      const e = document.createElement("div");
+      e.className = "order-empty";
+      e.textContent = "복사 시 사용할 역본이 없습니다. 아래에서 추가하세요.";
+      host.appendChild(e);
+    } else {
+      order.forEach((name, i) => {
+        const row = document.createElement("div");
+        row.className = "order-row";
+        row.innerHTML =
+          `<span class="order-idx">${i + 1}</span>` +
+          `<span class="order-name">${esc(name)}<span class="order-disp">${esc(dispOf(name))}</span></span>`;
+        row.appendChild(orderBtn("↑", i === 0, () => moveOrder(i, -1)));
+        row.appendChild(orderBtn("↓", i === order.length - 1, () => moveOrder(i, 1)));
+        row.appendChild(orderBtn("✕", false, () => removeOrder(i)));
+        host.appendChild(row);
+      });
+    }
+    const avail = (setState.versions || []).filter((v) => !order.includes(v.name));
+    if (avail.length) {
+      const add = document.createElement("button");
+      add.className = "set-add";
+      add.textContent = "＋ 역본 추가";
+      add.addEventListener("click", () => {
+        openMenu(
+          add,
+          avail.map((v) => ({ label: v.display, value: v.name, on: false })),
+          (name) => commitOrder([...setState.output_order, name])
+        );
+      });
+      host.appendChild(add);
+    }
+  }
+
+  function moveOrder(i, d) {
+    const o = setState.output_order.slice();
+    const j = i + d;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]];
+    commitOrder(o);
+  }
+  function removeOrder(i) {
+    const o = setState.output_order.slice();
+    o.splice(i, 1);
+    commitOrder(o);
+  }
+
+  async function loadSettings() {
+    setState = await api().get_settings();
+    renderFormat();
+    renderOrder();
+    refreshPreview();
+  }
+
+  function wireTabs() {
+    const seg = $("tab-seg");
+    if (!seg) return;
+    seg.querySelectorAll(".opt").forEach((opt) => {
+      opt.addEventListener("click", async () => {
+        const toSettings = opt.dataset.tab === "settings";
+        $("viewer-view").hidden = toSettings;
+        $("settings-view").hidden = !toSettings;
+        $("viewer-controls").hidden = toSettings;
+        if (toSettings && !settingsLoaded) {
+          settingsLoaded = true;
+          await loadSettings();
+        } else if (toSettings) {
+          refreshPreview(); // output_order may have changed elsewhere
+        }
+      });
+    });
   }
 
   function wireControls() {

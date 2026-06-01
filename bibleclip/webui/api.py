@@ -142,6 +142,69 @@ class Api:
         self.lib.save_settings()
         return ordered
 
+    # ---- Output settings (the "출력 설정" tab) ----
+
+    # Format keys the settings tab may write. Enums carry their allowed values;
+    # bool keys map to None (coerced to a real bool on write).
+    _FORMAT_KEYS = {
+        'book_name': {'long_ko', 'short_ko', 'long_en', 'short_en'},
+        'chapter_verse_format': {'colon', 'korean'},
+        'bracket_style': {'none', '[]', '()'},
+        'ref_position': {'before', 'after'},
+        'range_symbol': {'-', '~'},
+        'ref_body_separator': {' - ', ': ', ' '},
+        'output_mode': {'inline', 'newline'},
+        'newline_show_cv': None,
+        'show_version_header': None,
+        'hide_reference': None,
+    }
+
+    def get_settings(self):
+        """The format settings + output order the settings tab needs."""
+        s = self.lib.settings
+        return {
+            'format': {k: s.get(k) for k in self._FORMAT_KEYS},
+            'output_order': list(s.get('output_order', [])),
+            'versions': self.lib.versions(),  # name + display for label lookups
+        }
+
+    def set_setting(self, key, value):
+        """Update one whitelisted format setting and persist. Returns {ok}."""
+        if key not in self._FORMAT_KEYS:
+            return {'ok': False, 'error': f'unknown key: {key}'}
+        allowed = self._FORMAT_KEYS[key]
+        if allowed is None:               # boolean setting
+            value = bool(value)
+        elif value not in allowed:
+            return {'ok': False, 'error': f'invalid value for {key}: {value!r}'}
+        self.lib.settings[key] = value
+        self.lib.save_settings()
+        return {'ok': True}
+
+    def set_output_order(self, names):
+        """Replace the clipboard output order (versions used when a reference is
+        caught/copied). Filtered to loaded versions, dedup, order preserved as
+        given. Returns the cleaned list."""
+        seen = set()
+        cleaned = []
+        for n in names:
+            if n in self.lib.dbs and n not in seen:
+                seen.add(n)
+                cleaned.append(n)
+        self.lib.settings['output_order'] = cleaned
+        self.lib.save_settings()
+        return cleaned
+
+    def get_preview(self):
+        """Formatted output for the fixed sample (요 1:1-3) under current
+        settings — exactly what would land on the clipboard."""
+        r = self.lib.build_output('요 1:1-3')
+        if r and r.get('kind') == 'reference':
+            return r['text']
+        if not self.lib.settings.get('output_order'):
+            return '(출력할 성경 버전을 추가하세요)'
+        return '(데이터를 찾을 수 없습니다)'
+
     # ---- Navigation data ----
 
     def get_books(self, version):
