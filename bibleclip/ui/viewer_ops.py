@@ -70,46 +70,46 @@ class ViewerOpsMixin:
         self.viewer_chip_labels = {}
         for name in self._viewer_order:
             self._build_chip(name)
+        self._layout_chips()
         self._highlight_focused_chip()
         self._apply_viewer_chip_theme()
 
     def _build_chip(self, name):
         is_checked = name in self._viewer_checked
+        # highlightthickness is kept constant (2) so focusing never changes the
+        # chip's size — that would make the drag reflow jitter.
         outer = tk.Frame(self.chip_frame, relief=tk.SOLID, borderwidth=1,
-                         padx=8, pady=3, cursor='fleur')
+                         padx=8, pady=3, cursor='fleur', highlightthickness=2)
         label_text = f"{'☑' if is_checked else '☐'} {name}"
         lbl = tk.Label(outer, text=label_text, font=(UI_FONT, 9), cursor='fleur')
         lbl.pack()
-        outer.pack(side=tk.LEFT, padx=3, pady=2)
+        # NOTE: not packed — _layout_chips() places every chip by absolute x.
         self.viewer_chip_widgets[name] = outer
         self.viewer_chip_labels[name] = lbl
 
         # Per-chip drag state
-        state = {'press_x': 0, 'press_y': 0, 'dragging': False}
+        state = {'press_x': 0, 'dragging': False, 'grab_dx': 0}
 
         def on_press(event):
             state['press_x'] = event.x_root
-            state['press_y'] = event.y_root
             state['dragging'] = False
+            # cursor offset within the chip, so it doesn't jump when grabbed
+            state['grab_dx'] = event.x_root - outer.winfo_rootx()
             self._set_viewer_focused(name)
 
         def on_motion(event):
-            dx = abs(event.x_root - state['press_x'])
-            dy = abs(event.y_root - state['press_y'])
-            if not state['dragging'] and (dx > 4 or dy > 4):
+            if not state['dragging'] and abs(event.x_root - state['press_x']) > 4:
                 state['dragging'] = True
                 outer.configure(relief=tk.SUNKEN)
+                outer.lift()
             if state['dragging']:
-                self._show_drop_indicator(name, event.x_root)
+                fx = event.x_root - self.chip_frame.winfo_rootx() - state['grab_dx']
+                self._layout_chips(drag_name=name, drag_x=fx)
 
         def on_release(event):
             if state['dragging']:
                 outer.configure(relief=tk.SOLID)
-                pos = self._get_drop_position(event.x_root)
-                self._clear_drop_indicator()
-                if pos:
-                    tgt_name, drop_after = pos
-                    self._reorder_drop(name, tgt_name, drop_after)
+                self._commit_drag(name)
             else:
                 self._on_viewer_check_toggle(name)
 
@@ -129,12 +129,8 @@ class ViewerOpsMixin:
         accent = t['accent']
         border = t['border']
         for n, w in self.viewer_chip_widgets.items():
-            if n == self._viewer_focused:
-                w.configure(highlightthickness=2,
-                            highlightbackground=accent, highlightcolor=accent)
-            else:
-                w.configure(highlightthickness=0,
-                            highlightbackground=border, highlightcolor=border)
+            c = accent if n == self._viewer_focused else border
+            w.configure(highlightbackground=c, highlightcolor=c)
 
     def _on_viewer_check_toggle(self, name):
         if name in self._viewer_checked:
@@ -147,67 +143,69 @@ class ViewerOpsMixin:
         self._populate_books()
         self._on_book_changed(None)
 
-    # ---- Drag-drop helpers ----
+    # ---- Chip layout + live drag-reorder ----
 
-    def _get_drop_position(self, x_root):
-        """Return (target_name, drop_after_target) for cursor x position, or None."""
-        chips = [(n, self.viewer_chip_widgets[n]) for n in self._viewer_order
-                 if n in self.viewer_chip_widgets]
-        if not chips:
-            return None
-        for n, w in chips:
-            try:
-                wx = w.winfo_rootx()
-                ww = w.winfo_width()
-            except tk.TclError:
-                continue
-            if wx <= x_root <= wx + ww:
-                return n, x_root > (wx + ww / 2)
-        # Outside any chip — clamp to ends.
+    def _layout_chips(self, drag_name=None, drag_x=None):
+        """Place every chip by absolute x. During a drag the dragged chip
+        follows the cursor (drag_x, in chip_frame coords) while the others slide
+        to open a gap at the drop slot — so the new order is visible live."""
+        order = [n for n in self._viewer_order if n in self.viewer_chip_widgets]
+        if not order:
+            self.chip_frame.configure(height=1)
+            return
+        self.chip_frame.update_idletasks()
+        gap, pad = 6, 2
+        wd = {n: self.viewer_chip_widgets[n].winfo_reqwidth() for n in order}
+        h = max(self.viewer_chip_widgets[n].winfo_reqheight() for n in order)
+        self.chip_frame.configure(height=h + 6)
         try:
-            first_n, first_w = chips[0]
-            last_n, last_w = chips[-1]
-            if x_root < first_w.winfo_rootx():
-                return first_n, False
-            return last_n, True
+            self.chip_frame.pack_propagate(False)
         except tk.TclError:
-            return None
+            pass
 
-    def _show_drop_indicator(self, dragged_name, x_root):
-        pos = self._get_drop_position(x_root)
-        if not pos:
-            self._clear_drop_indicator()
+        if drag_name is None or drag_name not in order:
+            x = pad
+            for n in order:
+                self.viewer_chip_widgets[n].place(x=x, y=3)
+                x += wd[n] + gap
+            self._drag_target_order = order
             return
-        tgt_name, _ = pos
-        if tgt_name == dragged_name:
-            self._clear_drop_indicator()
-            return
-        accent = self.theme['accent']
-        border = self.theme['border']
-        for n, w in self.viewer_chip_widgets.items():
-            if n == tgt_name:
-                w.configure(highlightthickness=2,
-                            highlightbackground=accent, highlightcolor=accent)
-            elif n == self._viewer_focused:
-                w.configure(highlightthickness=2,
-                            highlightbackground=accent, highlightcolor=accent)
-            else:
-                w.configure(highlightthickness=0,
-                            highlightbackground=border, highlightcolor=border)
 
-    def _clear_drop_indicator(self):
-        self._highlight_focused_chip()
+        others = [n for n in order if n != drag_name]
+        dw = wd[drag_name]
+        drag_center = drag_x + dw / 2
+        # midpoints of the flowing chips decide where the dragged one inserts
+        cum, centers = pad, []
+        for n in others:
+            centers.append(cum + wd[n] / 2)
+            cum += wd[n] + gap
+        insert_idx = 0
+        for i, c in enumerate(centers):
+            if drag_center > c:
+                insert_idx = i + 1
+        # lay out the others, opening a (dw+gap) gap at insert_idx
+        x = pad
+        for i, n in enumerate(others):
+            if i == insert_idx:
+                x += dw + gap
+            self.viewer_chip_widgets[n].place(x=x, y=3)
+            x += wd[n] + gap
+        # the dragged chip follows the cursor, clamped inside the frame
+        fw = max(self.chip_frame.winfo_width(), int(cum + dw + gap))
+        clamped = max(pad, min(int(drag_x), fw - dw - pad))
+        self.viewer_chip_widgets[drag_name].place(x=clamped, y=3)
+        self.viewer_chip_widgets[drag_name].lift()
+        self._drag_target_order = others[:insert_idx] + [drag_name] + others[insert_idx:]
 
-    def _reorder_drop(self, src, target, drop_after):
-        if src == target or src not in self._viewer_order or target not in self._viewer_order:
-            return
-        self._viewer_order.remove(src)
-        tgt_idx = self._viewer_order.index(target)
-        insert_idx = tgt_idx + 1 if drop_after else tgt_idx
-        self._viewer_order.insert(insert_idx, src)
-        self._save_viewer_state()
-        self._render_viewer_versions()
-        self._load_chapter()
+    def _commit_drag(self, drag_name):
+        new_order = getattr(self, '_drag_target_order', None)
+        if new_order and list(new_order) != list(self._viewer_order):
+            self._viewer_order = list(new_order)
+            self._save_viewer_state()
+            self._render_viewer_versions()
+            self._load_chapter()
+        else:
+            self._layout_chips()  # snap back to resting positions
 
     def _save_viewer_state(self):
         self.settings['viewer_version_order'] = list(self._viewer_order)
