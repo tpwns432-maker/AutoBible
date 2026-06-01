@@ -91,6 +91,9 @@ def main():
     print(f"get_initial: primary={init['primary']} versions={len(init['versions'])} "
           f"books={len(init['books'])} last={last['book']}:{last['chapter']}")
 
+    assert isinstance(init['viewer'], list) and init['viewer'], init['viewer']
+    assert init['primary'] in init['viewer'], (init['primary'], init['viewer'])
+
     ver = init['primary']
     books = api.get_books(ver)
     assert any(b['num'] == 10 for b in books), "Genesis (10) missing"
@@ -111,6 +114,24 @@ def main():
     assert first['w'] and first['code'], first
     print(f"get_interlinear(10,1) -> {len(inter)} verses; "
           f"v1 first word: {first['w']}/{first['code']}")
+
+    # set_viewer_versions: validation + ordering, WITHOUT touching the real
+    # settings file (save_settings stubbed — see headless-test-no-save rule).
+    saved = []
+    api.lib.save_settings = lambda: saved.append(True)
+    all_names = [v['name'] for v in init['versions']]
+    if len(all_names) >= 2:
+        picked = api.set_viewer_versions([all_names[1], all_names[0], 'BOGUS'])
+        assert 'BOGUS' not in picked, picked
+        assert set(picked) == {all_names[0], all_names[1]}, picked
+        # order follows viewer_version_order, not the argument order
+        order = api.lib.settings.get('viewer_version_order') or all_names
+        assert picked == [n for n in order if n in (all_names[0], all_names[1])], picked
+        assert saved, "save_settings not called"
+        # refuse to drop to an empty set
+        kept = api.set_viewer_versions([])
+        assert kept == picked, kept
+        print(f"set_viewer_versions -> {picked} (empty rejected)")
 
     # markup converter unit checks
     assert markup_to_html('<num>H1</num> a^b') == '<span class="lex-num" data-code="H1">H1</span> a  b'

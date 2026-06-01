@@ -63,9 +63,11 @@
         <div class="opt on">성경 보기</div>
         <div class="opt">출력 설정</div>
       </div>
-      <!-- Only the versions currently in use show as chips; the rest live
-           behind the "+" (역본 추가·관리). Keeps the row uncluttered. -->
-      <span class="pill sel" id="ver-chip">KRV</span>
+      <!-- Only the versions currently in use show as chips (rendered live into
+           #ver-chips); the rest live behind the "+" (역본 추가·관리). The first
+           chip is the primary version — it drives the book/chapter pickers and
+           the original-language panel. Clicking a chip removes it. -->
+      <span class="ver-chips" id="ver-chips"><span class="pill sel">KRV</span></span>
       <span class="pill add" id="ver-add" title="역본 추가·관리">＋</span>
       <span class="vsep"></span>
       <span class="pill dropdown" id="book-pill">여호수아</span>

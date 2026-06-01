@@ -145,4 +145,11 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - **검증**: `tests/test_webui_api.py` 확장(`FakeClipboard`+`FakeWindow`로 `start_monitoring`→`창 1:1` 인플레이스 변환·`onReference` 푸시·`#사랑`→`onKeyword` 검증, 실 클립보드/webview 불필요). + 사용자 실창 검증(모니터 토글·`요 1:1-3` 변환·자동이동·드로어 OK).
 - **다음 후보(사용자 합의로 보류)**: 로그행 클릭 시 **재복사**(현재 이동만 — CTk도 이동만이라 동작 일치).
 
-**남은 Phase:** 3b 다역본 병렬 + 출력설정 탭 + (검색 패널) + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 3b — 다역본 병렬 보기 (✅ 완료, 사용자 실창 검증):**
+- 모델: `settings['viewer_versions']`(체크된 역본, `viewer_version_order` 기준 정렬). 첫 역본=primary(책/장 드롭다운·원어 패널 구동). CTk와 동일 모델.
+- `webui/api.py`: `get_initial`에 `'viewer'`(체크 리스트) 추가. 신규 `set_viewer_versions(names)` — dbs로 필터+`viewer_version_order`로 재정렬+`save_settings`, 최소 1개 유지, 정리된 리스트 반환.
+- `web/`: 단일 `#ver-chip`→`#ver-chips`(체크된 역본 칩 라이브 렌더, 첫 칩 primary 점 표시, 칩 `✕`로 제거·마지막 1개는 불가). `＋` 버튼=**다중선택 메뉴**(`openMenu`에 `multi` 옵션 추가 — 토글 시 안 닫힘, `onPick` 반환값으로 체크상태 반영). 본문 패널: 체크된 역본 **병렬 fetch**(`Promise.all`로 각 `get_chapter`) 후 JS에서 절번호 합집합 병합, 절마다 역본별 줄(`.vline`+`.vver` 배지). 단일 역본이면 배지 숨김. primary 변경 시 책/장 목록 갱신.
+- **검증**: `tests/test_webui_api.py` — `get_initial.viewer` + `set_viewer_versions`(검증·정렬·빈 거부, **save_settings 스텁**으로 사용자 설정 미오염). 사용자 실창 OK.
+- **다음 후보(사용자 합의로 보류)**: 칩 **드래그&드롭 순서 조정**(CTk엔 있음; 현재 웹은 `viewer_version_order` 고정 순서).
+
+**남은 Phase:** 3c 출력설정 탭 + 검색 패널 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)

@@ -117,9 +117,30 @@ class Api:
         return {
             'versions': self.lib.versions(),
             'primary': primary,
+            'viewer': list(self.lib.settings.get('viewer_versions', [])),
             'books': books,
             'last': {'version': primary, 'book': last_book, 'chapter': last_chapter},
         }
+
+    def set_viewer_versions(self, names):
+        """Replace the set of versions shown in parallel in the viewer.
+
+        The given names are filtered to loaded versions and re-sorted by the
+        persistent ``viewer_version_order`` so the on-screen order stays stable
+        regardless of toggle order. At least one version is always kept.
+        Returns the cleaned, ordered list."""
+        order = (self.lib.settings.get('viewer_version_order')
+                 or list(self.lib.dbs.keys()))
+        valid = {n for n in names if n in self.lib.dbs}
+        ordered = [n for n in order if n in valid]
+        for n in names:           # preserve any valid name missing from order
+            if n in self.lib.dbs and n not in ordered:
+                ordered.append(n)
+        if not ordered:
+            return list(self.lib.settings.get('viewer_versions', []))
+        self.lib.settings['viewer_versions'] = ordered
+        self.lib.save_settings()
+        return ordered
 
     # ---- Navigation data ----
 

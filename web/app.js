@@ -48,8 +48,16 @@
       el.className = "menu-item" + (it.on ? " on" : "");
       el.textContent = it.label;
       el.addEventListener("click", () => {
-        closeMenus();
-        onPick(it.value);
+        if (opts.multi) {
+          // Menu stays open for more selections; reflect the actual result
+          // (onPick returns the new on/off state, or undefined for no change).
+          const res = onPick(it.value);
+          if (res === true) el.classList.add("on");
+          else if (res === false) el.classList.remove("on");
+        } else {
+          closeMenus();
+          onPick(it.value);
+        }
       });
       menu.appendChild(el);
     });
@@ -122,16 +130,23 @@
   }
 
   const api = () => window.pywebview.api;
-  const state = { version: null, book: null, chapter: null, versions: [], books: [], chapters: [], monitoring: false };
+  // viewer = versions shown in parallel (first = primary, drives nav + 원어).
+  // state.version is kept as an alias for the primary so the existing
+  // navigation/interlinear code is unchanged.
+  const state = {
+    version: null, book: null, chapter: null,
+    versions: [], viewer: [], books: [], chapters: [], monitoring: false,
+  };
 
   async function boot() {
     const init = await api().get_initial();
-    state.version = init.primary;
     state.versions = init.versions;
+    state.viewer = (init.viewer && init.viewer.length) ? init.viewer : [init.primary].filter(Boolean);
+    state.version = state.viewer[0] || init.primary;
     state.books = init.books;
     state.book = init.last.book;
     state.chapter = init.last.chapter;
-    updateVerChip();
+    renderVerChips();
     state.chapters = await api().get_chapters(state.version, state.book);
     if (!state.chapters.includes(state.chapter)) {
       state.chapter = state.chapters[0] || 1;
@@ -146,9 +161,50 @@
     return b ? b.long : "?";
   }
 
-  function updateVerChip() {
-    const c = $("ver-chip");
-    if (c) c.textContent = state.version;
+  function displayName(name) {
+    const v = state.versions.find((x) => x.name === name);
+    return v ? v.display : name;
+  }
+
+  // ---- Version chips (multi-version parallel viewing) ----
+
+  function renderVerChips() {
+    const box = $("ver-chips");
+    if (!box) return;
+    box.innerHTML = state.viewer
+      .map((name, i) => {
+        const cls = "pill sel" + (i === 0 ? " primary" : "");
+        // The last remaining version can't be removed (×만 빠짐).
+        const x = state.viewer.length > 1 ? `<span class="x" title="제거">✕</span>` : "";
+        return `<span class="${cls}" data-ver="${esc(name)}" title="${esc(displayName(name))}">${esc(name)}${x}</span>`;
+      })
+      .join("");
+    box.querySelectorAll(".pill[data-ver]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const name = chip.dataset.ver;
+        if (state.viewer.length > 1) {
+          setViewer(state.viewer.filter((n) => n !== name));
+        }
+      });
+    });
+  }
+
+  async function setViewer(names) {
+    const cleaned = await api().set_viewer_versions(names);
+    const prevPrimary = state.version;
+    state.viewer = (cleaned && cleaned.length) ? cleaned : state.viewer;
+    state.version = state.viewer[0];
+    renderVerChips();
+    // Primary may have changed → its book/chapter lists might differ.
+    if (state.version !== prevPrimary) {
+      state.books = await api().get_books(state.version);
+      if (!state.books.some((b) => b.num === state.book)) {
+        state.book = state.books[0] ? state.books[0].num : state.book;
+      }
+    }
+    state.chapters = await api().get_chapters(state.version, state.book);
+    if (!state.chapters.includes(state.chapter)) state.chapter = state.chapters[0] || 1;
+    await loadChapter();
   }
 
   async function loadChapter(highlight) {
@@ -160,26 +216,52 @@
     $("interlin").innerHTML = `<div class="panel-loading">불러오는 중…</div>`;
     resetLexicon();
 
-    const [chap, inter] = await Promise.all([
-      api().get_chapter(state.version, state.book, state.chapter),
+    // Fetch every viewer version's chapter in parallel + the (version-
+    // independent) interlinear in one batch.
+    const want = state.viewer.slice();
+    const [chaps, inter] = await Promise.all([
+      Promise.all(want.map((v) => api().get_chapter(v, state.book, state.chapter))),
       api().get_interlinear(state.book, state.chapter),
     ]);
-    renderScripture(chap.verses, highlight);
+    const cols = want.map((name, i) => ({ name, verses: (chaps[i] && chaps[i].verses) || [] }));
+    renderScripture(cols, highlight);
     renderInterlinear(inter);
   }
 
-  function renderScripture(verses, highlight) {
-    if (!verses || !verses.length) {
+  // cols: [{name, verses:[{n,text}]}], in display order. The first column's
+  // verse set leads; verses missing from a column are simply skipped there.
+  function renderScripture(cols, highlight) {
+    const hasAny = cols.some((c) => c.verses && c.verses.length);
+    if (!hasAny) {
       $("scripture").innerHTML = `<div class="panel-loading">본문 없음</div>`;
       return;
     }
+    // Union of verse numbers across all columns, sorted.
+    const nums = new Set();
+    const maps = cols.map((c) => {
+      const m = new Map();
+      (c.verses || []).forEach((v) => { m.set(v.n, v.text); nums.add(v.n); });
+      return m;
+    });
+    const sorted = [...nums].sort((a, b) => a - b);
     const hl = new Set(highlight || []);
-    $("scripture").innerHTML = verses
-      .map(
-        (v) =>
-          `<div class="v${hl.has(v.n) ? " hl" : ""}"><span class="vnum">${v.n}</span>${esc(v.text)}</div>`
-      )
+    const multi = cols.length > 1;
+
+    $("scripture").innerHTML = sorted
+      .map((n) => {
+        const lines = cols
+          .map((c, i) => {
+            if (!maps[i].has(n)) return "";
+            const badge = multi ? `<span class="vver">${esc(c.name)}</span>` : "";
+            return `<span class="vline">${badge}${esc(maps[i].get(n))}</span>`;
+          })
+          .filter(Boolean)
+          .join("");
+        const cls = "v" + (multi ? " multi" : "") + (hl.has(n) ? " hl" : "");
+        return `<div class="${cls}"><span class="vnum">${n}</span>${lines}</div>`;
+      })
       .join("");
+
     if (hl.size) {
       const first = $("scripture").querySelector(".v.hl");
       if (first) first.scrollIntoView({ block: "center" });
@@ -348,17 +430,23 @@
       );
     });
 
-    $("ver-chip").addEventListener("click", () => {
+    // "＋" → multi-select menu: toggle versions in/out of the viewer set.
+    $("ver-add").addEventListener("click", () => {
       openMenu(
-        $("ver-chip"),
-        state.versions.map((v) => ({ label: v.display, value: v.name, on: v.name === state.version })),
-        async (name) => {
-          state.version = name;
-          updateVerChip();
-          state.chapters = await api().get_chapters(state.version, state.book);
-          if (!state.chapters.includes(state.chapter)) state.chapter = state.chapters[0] || 1;
-          loadChapter();
-        }
+        $("ver-add"),
+        state.versions.map((v) => ({
+          label: v.display, value: v.name, on: state.viewer.includes(v.name),
+        })),
+        (name) => {
+          const on = state.viewer.includes(name);
+          const next = on
+            ? state.viewer.filter((n) => n !== name)
+            : [...state.viewer, name];
+          if (!next.length) return true;   // refuse to remove the last → stays on
+          setViewer(next);
+          return !on;                      // new checked state
+        },
+        { multi: true }
       );
     });
 
