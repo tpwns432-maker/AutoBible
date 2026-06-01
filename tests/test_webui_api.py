@@ -171,9 +171,40 @@ def main():
     if strong is not None:
         assert strong['code'] == 'H3068' and '여호와' in strong['html']
         assert '<num>' not in strong['html'], "raw <num> leaked into html"
-        print(f"lookup_strong('H3068') -> {len(strong['html'])} chars html")
+        # refined entry: headword (before '^') + reading (first <font>) extracted
+        assert strong['headword'] and strong['headword'][0] >= '֐', strong['headword']
+        assert 'Yhwh' in strong['reading'], strong['reading']
+        # reading was lifted out of the body (not duplicated there)
+        assert 'Yhwh' not in strong['html'], strong['html'][:40]
+        assert isinstance(strong['morph'], list)
+        print(f"lookup_strong('H3068') -> head={strong['headword']} reading={strong['reading'][:16]}…")
     else:
         print("(no lexicon data — skipped lookup_strong)")
+
+    # hover summary (falls back to lexicon gloss when 원전분해 morphology absent)
+    hov = api.hover_summary('H3068', 10, 1, 1)
+    assert hov['code'] == 'H3068'
+    print(f"hover_summary -> {len(hov['lines'])} line(s)")
+
+    # keyword search + copy_reference (clipboard write stubbed out)
+    import bibleclip.webui.api as apimod_local
+    apimod_local.pyperclip = None  # don't touch the real clipboard
+    # search an explicit Korean version (a prior test left primary on English)
+    sr = api.search('태초', version=ver)
+    assert sr['hits'] and sr['hits'][0]['short'] == '창', sr['hits'][:1]
+    api.set_output_order([sr['version']])  # earlier test emptied output_order
+    cp = api.copy_reference(sr['hits'][0]['book'], sr['hits'][0]['chapter'],
+                            [sr['hits'][0]['verse']])
+    assert cp['ok'] and '태초' in cp['text'], cp
+    print(f"search('태초') -> {len(sr['hits'])} hits; copy_reference ok")
+
+    # set_viewer_order trusts the given order (drag reorder)
+    if len(all_names) >= 2:
+        ordr = api.set_viewer_order([all_names[1], all_names[0]])
+        assert ordr[:2] == [all_names[1], all_names[0]], ordr
+
+    # open_dict_window is a no-op without a popup factory (headless)
+    assert api.open_dict_window('H3068') == {'ok': False}
 
     monitor_check()
 

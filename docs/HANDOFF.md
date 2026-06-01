@@ -150,7 +150,7 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - `webui/api.py`: `get_initial`에 `'viewer'`(체크 리스트) 추가. 신규 `set_viewer_versions(names)` — dbs로 필터+`viewer_version_order`로 재정렬+`save_settings`, 최소 1개 유지, 정리된 리스트 반환.
 - `web/`: 단일 `#ver-chip`→`#ver-chips`(체크된 역본 칩 라이브 렌더, 첫 칩 primary 점 표시, 칩 `✕`로 제거·마지막 1개는 불가). `＋` 버튼=**다중선택 메뉴**(`openMenu`에 `multi` 옵션 추가 — 토글 시 안 닫힘, `onPick` 반환값으로 체크상태 반영). 본문 패널: 체크된 역본 **병렬 fetch**(`Promise.all`로 각 `get_chapter`) 후 JS에서 절번호 합집합 병합, 절마다 역본별 줄(`.vline`+`.vver` 배지). 단일 역본이면 배지 숨김. primary 변경 시 책/장 목록 갱신.
 - **검증**: `tests/test_webui_api.py` — `get_initial.viewer` + `set_viewer_versions`(검증·정렬·빈 거부, **save_settings 스텁**으로 사용자 설정 미오염). 사용자 실창 OK.
-- **다음 후보(사용자 합의로 보류)**: 칩 **드래그&드롭 순서 조정**(CTk엔 있음; 현재 웹은 `viewer_version_order` 고정 순서).
+- 칩 **드래그&드롭 순서 조정**: ✅ 완료(Phase 3d) — 아래.
 
 **Phase 3c — 출력 설정 탭 (✅ 완료, 사용자 실창 검증):**
 - `webui/api.py`: `get_settings`(format 10키+output_order+versions), `set_setting(key,value)`(화이트리스트 `_FORMAT_KEYS`: enum 값검증/bool 강제, save), `set_output_order(names)`(dbs 필터·dedup·순서 유지, save), `get_preview()`(`build_output('요 1:1-3')` 결과 텍스트 = 실제 복사물).
@@ -159,4 +159,15 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - **검증**: `tests/test_webui_api.py` — get_settings/set_setting(enum·bool·미지키)/set_output_order(필터·dedup)/get_preview(실데이터·빈순서 플레이스홀더), **save_settings 스텁**. 사용자 실창 OK(탭 전환·미리보기·순서·모니터 반영).
 - **출력 순서 FLIP 애니메이션 (✅ 완료, 사용자 OK)**: ↑↓/제거 시 행이 자리를 미끄러져 바뀜. `commitOrder`를 낙관적(즉시 재렌더+`flipReorder`)으로 전환하고 백엔드 저장은 백그라운드 reconcile. `rowTops()`로 이전 top 기록→재렌더→이전위치 transform→rAF에서 transition으로 복귀(.22s). 행에 `data-ver`.
 
-**남은 Phase:** 3d 검색 패널 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 3d — 검색·사전 강화·재복사·칩 드래그·UX 패치 (✅ 완료, 사용자 실창 검증):**
+- **Library 리팩터**: `build_output`의 포맷 코어를 `format_reference(book,chapter,verses)->(text,n_parts)`로 추출(재복사·미리보기와 공유). `morphology(code,book,ch,verse)` 추가(원전분해.sdb→형태소; 현재 사용자 환경엔 데이터 없어 빈 리스트로 graceful).
+- **검색 패널**: `api.search(keyword,version,limit)`(기본=primary/한국어, hits=book/chapter/verse/short/text), `api.copy_reference(book,ch,verses)`(format_reference→pyperclip 복사+notify). 프론트: 좌측 레일 검색뷰(입력+Enter/버튼, 결과 클릭→복사 토스트). 모니터 `#키워드` 캡처→검색뷰 자동 표시.
+- **사전 정교화**: `parse_entry(markup)`로 `headword`(`^` 앞)·`reading`(첫 `<font>`)·`html`(나머지) 분리 → 사전 패널에 히브리어 48px 헤드워드+음역. `lookup_strong(code,lang,book,ch,verse)`에 `morph` 포함. 한글/영어 토글 배선(`lexLang`).
+- **hover/우클릭**: 원어 칩 hover→0.4s 후 툴팁(`hover_summary`: 헤드워드 30px+음역+요약줄). 우클릭→`open_dict_window`(app.py가 `set_popup_factory`로 `webview.create_window(html=...)` 주입; `_dict_page_html` 자가완결 인라인 CSS, 폰트는 시스템 폴백). api.py는 여전히 webview 비의존(window/factory 주입식).
+- **클립보드 로그 재복사**: 로그행 클릭 시 이동 + `copy_reference`로 다시 복사(토스트).
+- **칩 드래그 순서조정 + 라이브 갭**: `api.set_viewer_order(names)`(주어진 순서 신뢰+`viewer_version_order` 앞으로). 프론트는 박스 위임 HTML5 DnD; `dragover` 때 DOM 재렌더 없이 다른 칩에 `translateX` 트랜지션으로 삽입 갭을 실시간 표시(`layoutDragGap`), 드롭 시 `reorderViewer`+`flipChips` 안착. (칩 add/remove에도 `flipChips`.)
+- **UX 패치**: ① 출력설정을 상단 탭→**좌측 레일 아이콘**(`#nav-settings`, 본문·검색 사이)로 이동, `#tab-seg` 제거, `showView('viewer'|'settings'|'search')`로 통합. ② 모니터가 **참조** 캡처 시 `showView('viewer')`로 본문 복귀. ③ hover 헤드워드 30px. ④ 역본 칩 라이브 드래그.
+- ⚠️ 편집 중 `web/app.js`에 NUL 바이트 2개 혼입된 적 있음(`join(" ")`가 `join("\x00")`로) → 제거함. 커밋/실행 전 `python -c "open('web/app.js','rb').read().count(b'\x00')"`로 점검 권장.
+- **검증**: `tests/test_webui_api.py` 대폭 확장(lookup_strong headword/reading/morph, hover_summary, search+copy_reference[clipboard 스텁], set_viewer_order, open_dict_window 무팩토리 no-op; **save_settings 스텁**). 사용자 실창 OK 전 항목.
+
+**남은 Phase:** 4 폴리싱·상태(글자 크기 A±·테마 지속·창 위치 등) · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)

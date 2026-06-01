@@ -20,6 +20,11 @@ except Exception:  # pragma: no cover - clipboard backend optional at import
 # only need to translate the two non-standard pieces — '^' separators and the
 # custom <num> tag; <b>/<br>/<sup>/<font color> render natively in a browser.
 _NUM_RE = re.compile(r'<\s*num\s*>(.*?)<\s*/\s*num\s*>', re.S | re.I)
+# A lexicon entry starts: HEADWORD^<font ...>reading</font><br>... The first
+# font holds the romanization/Korean reading; the rest is the gloss + body.
+_FIRST_FONT_RE = re.compile(r'^\s*<font[^>]*>(.*?)</font>', re.S | re.I)
+_TAGS_RE = re.compile(r'<[^>]+>')
+_LEAD_BR_RE = re.compile(r'^(?:\s*<br\s*/?>\s*)+', re.I)
 
 
 def markup_to_html(markup):
@@ -30,12 +35,104 @@ def markup_to_html(markup):
     return html
 
 
+def parse_entry(markup):
+    """Split a raw lexicon entry into headword / reading / body-HTML.
+
+    Layout: ``HEADWORD^<font>reading</font><br><font>gloss</font>…body``.
+    Falls back gracefully (empty headword/reading) for entries that don't
+    follow it."""
+    if not markup:
+        return {'headword': '', 'reading': '', 'html': ''}
+    headword, rest = '', markup
+    if '^' in markup:
+        headword, rest = markup.split('^', 1)
+        headword = headword.strip()
+    reading = ''
+    m = _FIRST_FONT_RE.match(rest)
+    if m:
+        reading = _TAGS_RE.sub('', m.group(1)).strip()
+        rest = _LEAD_BR_RE.sub('', rest[m.end():])
+    return {'headword': headword, 'reading': reading, 'html': markup_to_html(rest)}
+
+
+def _morph_html(morph):
+    """Render a morphology list (Library.morphology) to the 형태소 분석 block."""
+    if not morph:
+        return ''
+    rows = []
+    for w in morph:
+        seg = f"<b>{w['lemma']}</b>"
+        if w.get('translit'):
+            seg += f" {w['translit']}"
+        if w.get('pos'):
+            seg += f" · {w['pos']}"
+        if w.get('gloss') and w['gloss'] != '_':
+            seg += f" · {w['gloss']}"
+        rows.append(seg)
+    return ('<div class="morph"><div class="morph-h">형태소 분석</div>'
+            + '<br>'.join(rows) + '</div>')
+
+
+# Self-contained styles for the right-click dict window. It's created with
+# inline HTML (no base URL), so it can't link the bundled CSS/fonts — the font
+# stacks fall back to system Korean/Hebrew fonts, which is fine for a popup.
+_DICT_THEMES = {
+    'light': dict(bg='#FAF9FC', card='#FFFFFF', border='#EFEBF6', text='#241D33',
+                  muted='#6A6086', dim='#A99FC0', accent='#6D4DFF',
+                  chipbg='#F3EFFE', heb='#1A1330'),
+    'dark': dict(bg='#0F0B1A', card='#171127', border='#2A2140', text='#ECE9F5',
+                 muted='#A99FC6', dim='#7D7399', accent='#9A86FF',
+                 chipbg='#241A3F', heb='#ECE9F5'),
+}
+
+
+def _dict_page_html(code, entry, theme='light'):
+    t = _DICT_THEMES.get(theme, _DICT_THEMES['light'])
+    if not entry:
+        head = body = ''
+        reading = ''
+        morph = ''
+    else:
+        head = entry.get('headword', '')
+        reading = entry.get('reading', '')
+        body = entry.get('html', '') or '사전 항목 없음'
+        morph = _morph_html(entry.get('morph'))
+    head_block = ''
+    if head:
+        head_block = (f'<div class="head"><span class="heb">{head}</span>'
+                      f'<span class="rom">{reading}</span></div>')
+    font_ui = ('"Pretendard","Apple SD Gothic Neo","Malgun Gothic",'
+               '"Segoe UI","Noto Sans KR",system-ui,sans-serif')
+    font_heb = '"SBL Hebrew","Times New Roman","Noto Serif Hebrew",serif'
+    return f"""<!DOCTYPE html><html lang="ko" data-theme="{theme}"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>사전 · {code}</title><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:{font_ui};background:{t['bg']};color:{t['text']};
+ padding:20px;line-height:1.8;-webkit-font-smoothing:antialiased}}
+.chip{{display:inline-block;font-size:11px;font-weight:700;color:{t['accent']};
+ background:{t['chipbg']};border-radius:8px;padding:3px 10px;margin-bottom:12px}}
+.head{{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}}
+.head .heb{{font-family:{font_heb};font-size:48px;line-height:1.15;color:{t['heb']}}}
+.head .rom{{color:{t['accent']};font-weight:700;font-size:15px}}
+.morph{{border:1px solid {t['border']};border-radius:10px;padding:10px 12px;
+ margin-bottom:14px;font-size:13px;color:{t['muted']}}}
+.morph-h{{color:{t['accent']};font-weight:700;font-size:11px;margin-bottom:4px}}
+.body{{font-size:13px;color:{t['muted']}}}
+.body b{{color:{t['text']}}}
+.lex-num{{color:{t['accent']};text-decoration:underline}}
+</style></head><body>
+<span class="chip">{code}</span>{head_block}{morph}<div class="body">{body}</div>
+</body></html>"""
+
+
 class Api:
     """Thin, JSON-friendly facade over Library for the web front-end."""
 
     def __init__(self, library):
         self.lib = library
-        self._window = None      # pywebview window, injected by webui.app.main()
+        self._window = None        # pywebview window, injected by webui.app.main()
+        self._popup_factory = None  # callable(title, html) -> new native window
         self.monitoring = False
 
     def set_window(self, window):
@@ -44,6 +141,11 @@ class Api:
         Kept separate from __init__ so headless tests construct an Api with no
         window (pushes become no-ops)."""
         self._window = window
+
+    def set_popup_factory(self, factory):
+        """Receive a callable that opens a new native window from (title, html).
+        Supplied by webui.app (which owns `webview`); None in headless tests."""
+        self._popup_factory = factory
 
     def _push(self, fn, *args):
         """Invoke ``window.bibleclip.<fn>(...args)`` in the web view.
@@ -142,6 +244,22 @@ class Api:
         self.lib.save_settings()
         return ordered
 
+    def set_viewer_order(self, names):
+        """Set the explicit display order of the viewer's versions (chip drag).
+
+        Unlike set_viewer_versions this trusts the given order verbatim (it's a
+        reorder of the already-checked set) and pushes it to the front of the
+        persistent viewer_version_order. Returns the cleaned list."""
+        valid = [n for n in names if n in self.lib.dbs]
+        if not valid:
+            return list(self.lib.settings.get('viewer_versions', []))
+        self.lib.settings['viewer_versions'] = valid
+        rest = [n for n in (self.lib.settings.get('viewer_version_order') or [])
+                if n in self.lib.dbs and n not in valid]
+        self.lib.settings['viewer_version_order'] = valid + rest
+        self.lib.save_settings()
+        return valid
+
     # ---- Output settings (the "출력 설정" tab) ----
 
     # Format keys the settings tab may write. Enums carry their allowed values;
@@ -232,10 +350,112 @@ class Api:
         return [{'n': n, 'words': [{'w': w, 'code': c} for (w, c) in words]}
                 for n, words in self.lib.interlinear(int(book), int(chapter))]
 
+    # ---- Keyword search ----
+
+    def _search_version(self):
+        ver = self.lib.primary_version()
+        if ver and ver in self.lib.dbs:
+            return ver
+        for v in ('KRV', 'NRKV', 'KNRSV'):
+            if v in self.lib.dbs:
+                return v
+        return next(iter(self.lib.dbs), None)
+
+    def search(self, keyword, version=None, limit=200):
+        """Keyword search in one version (defaults to the primary/Korean one).
+
+        Returns {keyword, version, display, hits:[{book,chapter,verse,short,text}]}."""
+        keyword = (keyword or '').strip().lstrip('#').strip()
+        if not keyword:
+            return {'keyword': '', 'version': None, 'display': '', 'hits': []}
+        ver = version if (version and version in self.lib.dbs) else self._search_version()
+        db = self.lib.dbs.get(ver)
+        if not db:
+            return {'keyword': keyword, 'version': None, 'display': '', 'hits': []}
+        rows = db.search(keyword, limit=limit)
+        hits = [{'book': b, 'chapter': c, 'verse': v,
+                 'short': db.books[b][0] if b in db.books else '?', 'text': t}
+                for (b, c, v, t) in rows]
+        return {'keyword': keyword, 'version': ver,
+                'display': db.display_name, 'hits': hits}
+
+    def copy_reference(self, book, chapter, verses):
+        """Format book/chapter/verses via the output pipeline, place it on the
+        clipboard, and tell the monitor (so it isn't re-detected). ``verses`` is
+        a list (empty = whole chapter). Returns {ok, text} or {ok:False}."""
+        vs = [int(v) for v in (verses or [])]
+        text, _ = self.lib.format_reference(int(book), int(chapter), vs)
+        if not text:
+            return {'ok': False}
+        if pyperclip is not None:
+            try:
+                pyperclip.copy(text)
+            except Exception:
+                pass
+        self.lib.notify_clipboard_written(text)
+        return {'ok': True, 'text': text}
+
     # ---- Lexicon ----
 
-    def lookup_strong(self, code, lang='ko'):
+    def lookup_strong(self, code, lang='ko', book=None, chapter=None, verse=None):
+        """Full lexicon entry for a Strong's code: {code, headword, reading,
+        html, morph}. ``morph`` (형태소 분석) is filled when verse context is
+        given. Returns None only when there's neither a dict entry nor morph."""
         markup = self.lib.lookup_strong(code, lang)
+        morph = []
+        if book and chapter and verse:
+            morph = self.lib.morphology(code, int(book), int(chapter), int(verse))
         if not markup:
+            if morph:
+                return {'code': code, 'headword': '', 'reading': '',
+                        'html': '', 'morph': morph}
             return None
-        return {'code': code, 'html': markup_to_html(markup)}
+        entry = parse_entry(markup)
+        entry['code'] = code
+        entry['morph'] = morph
+        return entry
+
+    def hover_summary(self, code, book=None, chapter=None, verse=None):
+        """Short preview for a Strong's word (hover tooltip): the original-
+        language headword (shown large by the UI) + reading + a short gloss
+        line. Prefers verse morphology, falls back to the lexicon entry.
+        {code, headword, reading, lines:[...]}."""
+        headword = reading = ''
+        lines = []
+        if book and chapter and verse:
+            morph = self.lib.morphology(code, int(book), int(chapter), int(verse))
+            if morph:
+                w = morph[0]
+                headword = w['lemma']
+                reading = w['translit']
+                parts = []
+                if w['pos']:
+                    parts.append(w['pos'])
+                if w['gloss'] and w['gloss'] != '_':
+                    parts.append(w['gloss'])
+                if parts:
+                    lines.append(' · '.join(parts))
+        if not headword and not lines:
+            markup = self.lib.lookup_strong(code, 'ko') or self.lib.lookup_strong(code, 'en')
+            if markup:
+                e = parse_entry(markup)
+                headword, reading = e['headword'], e['reading']
+                txt = _TAGS_RE.sub('', e['html']).replace('^', ' ')
+                txt = re.sub(r'\s+', ' ', txt).strip()
+                if txt:
+                    lines.append(txt[:80] + ('…' if len(txt) > 80 else ''))
+        return {'code': code, 'headword': headword, 'reading': reading, 'lines': lines}
+
+    def open_dict_window(self, code, lang='ko', book=None, chapter=None,
+                         verse=None, theme='light'):
+        """Open an independent native window with the full dict entry (the
+        right-click behaviour from the desktop app). No-op without a factory."""
+        if self._popup_factory is None:
+            return {'ok': False}
+        entry = self.lookup_strong(code, lang, book, chapter, verse)
+        html = _dict_page_html(code, entry, theme)
+        try:
+            self._popup_factory(f"사전 · {code}", html)
+        except Exception:
+            return {'ok': False}
+        return {'ok': True}

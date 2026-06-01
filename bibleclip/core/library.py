@@ -21,6 +21,7 @@ from bibleclip.core.clipboard_monitor import ClipboardMonitor
 from bibleclip.data.bible_db import BibleDB
 from bibleclip.data.original_lang import (
     resolve_original_lang_dir, BethlehemDB, Lexicon, parse_korean_strongs,
+    parse_wonjun_verse,
 )
 
 
@@ -259,6 +260,23 @@ class Library:
             out.append((verse, parse_korean_strongs(btext)))
         return out
 
+    def morphology(self, code, book_num, chapter, verse):
+        """Morphological analysis entries for one Strong's code in one verse,
+        from 원전분해.sdb: [{'lemma','translit','pos','gloss'}, ...] (possibly
+        empty when the data isn't loaded or the word isn't present)."""
+        if not (self.bethlehem_wonjun and verse and book_num):
+            return []
+        try:
+            rows = self.bethlehem_wonjun.get_chapter_verses(book_num, chapter)
+        except Exception:
+            return []
+        btext = next((t for vn, t in rows if vn == verse), None)
+        if not btext:
+            return []
+        return [{'lemma': w['lemma'], 'translit': w['translit'],
+                 'pos': w['pos'], 'gloss': w['gloss']}
+                for w in parse_wonjun_verse(btext) if w['code'] == code]
+
     # ---- Reference → output pipeline ----
 
     def build_output(self, text):
@@ -285,10 +303,28 @@ class Library:
             return None
         book_num, short_name, long_name, chapter, verses = refs[0]
 
+        text_out, n_parts = self.format_reference(book_num, chapter, verses)
+        if not text_out:
+            return None
+        return {
+            'kind': 'reference',
+            'book_num': book_num,
+            'chapter': chapter,
+            'verses': verses,
+            'short_name': short_name,
+            'text': text_out,
+            'n_parts': n_parts,
+        }
+
+    def format_reference(self, book_num, chapter, verses):
+        """Format one reference across the configured ``output_order`` versions.
+
+        ``verses`` may be a list of verse numbers or empty/None for the whole
+        chapter. Returns ``(text, n_parts)`` — ``('', 0)`` when nothing matched
+        (no output_order, or no loaded version had the passage)."""
         order = self.settings.get('output_order') or []
         if not order:
-            return None
-
+            return '', 0
         fmt = Formatter(self.settings, self.dbs)
         parts = []
         for ver_name in order:
@@ -306,18 +342,9 @@ class Library:
             result = fmt.format_version_output(db, book_num, chapter, actual_verses, verse_data)
             if result:
                 parts.append(result)
-
         if not parts:
-            return None
-        return {
-            'kind': 'reference',
-            'book_num': book_num,
-            'chapter': chapter,
-            'verses': verses,
-            'short_name': short_name,
-            'text': '\n\n'.join(parts),
-            'n_parts': len(parts),
-        }
+            return '', 0
+        return '\n\n'.join(parts), len(parts)
 
     # ---- Clipboard monitoring ----
 

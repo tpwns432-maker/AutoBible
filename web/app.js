@@ -169,34 +169,150 @@
 
   // ---- Version chips (multi-version parallel viewing) ----
 
+  // Live drag-reorder state. dragGeo snapshots each chip's width/left at
+  // dragstart so the others can slide open a gap that tracks the cursor.
+  const DRAG_GAP = 6; // must match .ver-chips { gap }
+  let chipDrag = null, dragGeo = null, dragInsert = 0, suppressChipClick = false;
+
+  // FLIP for the chip row: capture each chip's x before a re-render so they can
+  // slide from old → new position (drag-reorder / add / remove).
+  function chipLefts() {
+    const m = new Map();
+    const box = $("ver-chips");
+    if (box) box.querySelectorAll(".pill[data-ver]").forEach((el) => {
+      m.set(el.dataset.ver, el.getBoundingClientRect().left);
+    });
+    return m;
+  }
+  function flipChips(prev) {
+    const box = $("ver-chips");
+    if (!box) return;
+    const chips = box.querySelectorAll(".pill[data-ver]");
+    chips.forEach((el) => {
+      const before = prev.get(el.dataset.ver);
+      if (before == null) return;
+      const dx = before - el.getBoundingClientRect().left;
+      if (!dx) return;
+      el.style.transition = "none";
+      el.style.transform = `translateX(${dx}px)`;
+    });
+    requestAnimationFrame(() => {
+      chips.forEach((el) => {
+        if (!el.style.transform) return;
+        el.style.transition = "transform .22s cubic-bezier(.2,.8,.25,1)";
+        el.style.transform = "";
+      });
+    });
+  }
+
   function renderVerChips() {
     const box = $("ver-chips");
     if (!box) return;
+    const prev = chipLefts();
+    const draggable = state.viewer.length > 1;
     box.innerHTML = state.viewer
       .map((name, i) => {
         const cls = "pill sel" + (i === 0 ? " primary" : "");
         // The last remaining version can't be removed (×만 빠짐).
         const x = state.viewer.length > 1 ? `<span class="x" title="제거">✕</span>` : "";
-        return `<span class="${cls}" data-ver="${esc(name)}" title="${esc(displayName(name))}">${esc(name)}${x}</span>`;
+        return `<span class="${cls}" data-ver="${esc(name)}" ${draggable ? 'draggable="true"' : ""} title="${esc(displayName(name))}">${esc(name)}${x}</span>`;
       })
       .join("");
     box.querySelectorAll(".pill[data-ver]").forEach((chip) => {
+      const name = chip.dataset.ver;
+      // Click the ✕ (or chip) removes; drag-reorder is handled on the box.
       chip.addEventListener("click", () => {
-        const name = chip.dataset.ver;
-        if (state.viewer.length > 1) {
-          setViewer(state.viewer.filter((n) => n !== name));
-        }
+        if (suppressChipClick) { suppressChipClick = false; return; }
+        if (state.viewer.length > 1) setViewer(state.viewer.filter((n) => n !== name));
       });
+    });
+    flipChips(prev);
+  }
+
+  // Live drag-reorder (delegated on the chip row, wired once). While dragging,
+  // the other chips slide to open a gap at the cursor's insertion point so the
+  // drop target is always visible; on drop the new order is committed.
+  function wireChipDnD() {
+    const box = $("ver-chips");
+    if (!box) return;
+
+    box.addEventListener("dragstart", (e) => {
+      const chip = e.target.closest(".pill[data-ver]");
+      if (!chip || state.viewer.length < 2) return;
+      chipDrag = chip.dataset.ver;
+      dragGeo = [...box.querySelectorAll(".pill[data-ver]")].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { name: el.dataset.ver, el, w: r.width, left: r.left };
+      });
+      dragInsert = dragGeo.findIndex((g) => g.name === chipDrag);
+      e.dataTransfer.effectAllowed = "move";
+      chip.classList.add("dragging");
+    });
+
+    box.addEventListener("dragover", (e) => {
+      if (!chipDrag) return;
+      e.preventDefault();          // allow drop
+      layoutDragGap(e.clientX);
+    });
+
+    box.addEventListener("drop", (e) => {
+      if (!chipDrag) return;
+      e.preventDefault();
+      const others = dragGeo.map((g) => g.name).filter((n) => n !== chipDrag);
+      const order = others.slice();
+      order.splice(dragInsert, 0, chipDrag);
+      suppressChipClick = true;    // the drop is followed by a click on the chip
+      const changed = order.join(" ") !== state.viewer.join(" ");
+      chipDrag = null;
+      if (changed) { reorderViewer(order); dragGeo = null; } // rebuild + flipChips settles the gap
+      else clearDragGap();
+    });
+
+    box.addEventListener("dragend", () => {
+      // Fires after drop (handled) or on cancel (animate everything back).
+      if (chipDrag) { chipDrag = null; clearDragGap(); }
     });
   }
 
-  async function setViewer(names) {
-    const cleaned = await api().set_viewer_versions(names);
+  function layoutDragGap(clientX) {
+    const others = dragGeo.filter((g) => g.name !== chipDrag);
+    let t = others.length;
+    for (let i = 0; i < others.length; i++) {
+      if (clientX < others[i].left + others[i].w / 2) { t = i; break; }
+    }
+    dragInsert = t;
+    const finalNames = others.map((g) => g.name);
+    finalNames.splice(t, 0, chipDrag);
+    const target = {};
+    let x = dragGeo[0].left;
+    finalNames.forEach((nm) => {
+      const g = dragGeo.find((z) => z.name === nm);
+      target[nm] = x;
+      x += g.w + DRAG_GAP;
+    });
+    dragGeo.forEach((g) => {
+      const dx = target[g.name] - g.left;
+      g.el.style.transition = "transform .16s ease";
+      g.el.style.transform = dx ? `translateX(${dx}px)` : "";
+    });
+  }
+
+  function clearDragGap() {
+    if (!dragGeo) return;
+    dragGeo.forEach((g) => {
+      g.el.style.transition = "transform .16s ease";
+      g.el.style.transform = "";
+      g.el.classList.remove("dragging");
+    });
+    dragGeo = null;
+  }
+
+  // Shared tail: re-render chips, refresh primary-dependent lists, reload.
+  async function applyViewer(cleaned) {
     const prevPrimary = state.version;
-    state.viewer = (cleaned && cleaned.length) ? cleaned : state.viewer;
+    state.viewer = cleaned && cleaned.length ? cleaned : state.viewer;
     state.version = state.viewer[0];
     renderVerChips();
-    // Primary may have changed → its book/chapter lists might differ.
     if (state.version !== prevPrimary) {
       state.books = await api().get_books(state.version);
       if (!state.books.some((b) => b.num === state.book)) {
@@ -206,6 +322,14 @@
     state.chapters = await api().get_chapters(state.version, state.book);
     if (!state.chapters.includes(state.chapter)) state.chapter = state.chapters[0] || 1;
     await loadChapter();
+  }
+
+  async function setViewer(names) {
+    await applyViewer(await api().set_viewer_versions(names));
+  }
+
+  async function reorderViewer(order) {
+    await applyViewer(await api().set_viewer_order(order));
   }
 
   async function loadChapter(highlight) {
@@ -279,7 +403,7 @@
         const words = row.words
           .map((w) =>
             w.code
-              ? `${esc(w.w)}<span class="strong" data-code="${esc(w.code)}">${esc(w.code)}</span>`
+              ? `${esc(w.w)}<span class="strong" data-code="${esc(w.code)}" data-v="${row.n}">${esc(w.code)}</span>`
               : esc(w.w)
           )
           .join(" ");
@@ -293,16 +417,79 @@
       `<div class="panel-loading">원어 단어의 스트롱 번호를 클릭하세요</div>`;
   }
 
-  async function showStrong(code) {
-    $("lexicon").innerHTML = `<div class="panel-loading">[${esc(code)}] 불러오는 중…</div>`;
-    const res = await api().lookup_strong(code);
+  let lexLang = "ko";       // dictionary language (한글/영어 toggle)
+  let lexCur = null;        // {code, verse} currently shown — for re-lookup
+
+  function renderMorph(morph) {
+    if (!morph || !morph.length) return "";
+    const rows = morph
+      .map((w) => {
+        let s = `<b>${esc(w.lemma)}</b>`;
+        if (w.translit) s += ` ${esc(w.translit)}`;
+        if (w.pos) s += ` · ${esc(w.pos)}`;
+        if (w.gloss && w.gloss !== "_") s += ` · ${esc(w.gloss)}`;
+        return s;
+      })
+      .join("<br>");
+    return `<div class="morph"><div class="morph-h">형태소 분석</div>${rows}</div>`;
+  }
+
+  function renderLexEntry(code, res) {
     if (!res) {
       $("lexicon").innerHTML =
         `<span class="chip">${esc(code)}</span><div class="lex-body">사전 항목 없음</div>`;
       return;
     }
+    const head = res.headword
+      ? `<div class="lex-head"><span class="heb">${esc(res.headword)}</span>` +
+        `<span class="rom">${esc(res.reading)}</span></div>`
+      : "";
     $("lexicon").innerHTML =
-      `<span class="chip">${esc(res.code)}</span><div class="lex-body">${res.html}</div>`;
+      `<span class="chip">${esc(res.code)}</span>${head}${renderMorph(res.morph)}` +
+      `<div class="lex-body">${res.html || "사전 항목 없음"}</div>`;
+  }
+
+  // code from an interlinear chip carries a verse (data-v); lexicon cross-refs
+  // (.lex-num) don't — verse is then undefined and morphology is skipped.
+  async function showStrong(code, verse) {
+    lexCur = { code, verse: verse || null };
+    $("lexicon").innerHTML = `<div class="panel-loading">[${esc(code)}] 불러오는 중…</div>`;
+    const res = await api().lookup_strong(code, lexLang, state.book, state.chapter, lexCur.verse);
+    renderLexEntry(code, res);
+  }
+
+  // ---- Hover tooltip over original-language words ----
+
+  let tipTimer = null, tipEl = null, tipKey = null;
+
+  function hideTip() {
+    if (tipTimer) { clearTimeout(tipTimer); tipTimer = null; }
+    if (tipEl) { tipEl.remove(); tipEl = null; }
+    tipKey = null;
+  }
+
+  function scheduleTip(code, verse, x, y) {
+    const key = code + ":" + verse;
+    if (key === tipKey) return;
+    hideTip();
+    tipKey = key;
+    tipTimer = setTimeout(async () => {
+      const res = await api().hover_summary(code, state.book, state.chapter, verse || null);
+      if (tipKey !== key) return; // pointer moved away while loading
+      const head = res.headword
+        ? `<div class="tip-head"><span class="tip-heb">${esc(res.headword)}</span>` +
+          (res.reading ? `<span class="tip-rom">${esc(res.reading)}</span>` : "") + `</div>`
+        : "";
+      const lines = (res.lines || []).map(esc).join("<br>");
+      tipEl = document.createElement("div");
+      tipEl.className = "lex-tip";
+      tipEl.innerHTML = `${head}<span class="tip-code">[${esc(code)}]</span>${lines ? "<br>" + lines : ""}`;
+      document.body.appendChild(tipEl);
+      const tx = Math.min(x + 14, window.innerWidth - tipEl.offsetWidth - 10);
+      const ty = Math.min(y + 16, window.innerHeight - tipEl.offsetHeight - 10);
+      tipEl.style.left = Math.max(8, tx) + "px";
+      tipEl.style.top = Math.max(8, ty) + "px";
+    }, 400);
   }
 
   // ---- Clipboard monitoring ----
@@ -351,9 +538,12 @@
       .reverse()
       .join("");
     list.querySelectorAll("[data-log]").forEach((row) => {
-      row.addEventListener("click", () => {
+      row.addEventListener("click", async () => {
         const e = refLog[Number(row.dataset.log)];
-        if (e) goToRef(e.book_num, e.chapter, e.verses);
+        if (!e) return;
+        goToRef(e.book_num, e.chapter, e.verses);
+        const r = await api().copy_reference(e.book_num, e.chapter, e.verses || []);
+        if (r && r.ok) toast(`${e.short_name} ${e.chapter}:${vlist(e.verses)} 다시 복사됨`);
       });
     });
   }
@@ -391,13 +581,16 @@
         renderLog();
         flagUnread();
         toast(`${r.short_name} ${r.chapter}:${vlist(r.verses)} 변환·복사됨`);
+        showView("viewer"); // a caught reference always returns to the bible view
         goToRef(r.book_num, r.chapter, r.verses);
       },
       onKeyword(keyword) {
         refLog.push({ kind: "keyword", keyword });
         renderLog();
         flagUnread();
-        toast(`키워드 "${keyword}" — 검색 기능 준비 중`);
+        toast(`키워드 "${keyword}" 검색`);
+        showView("search");
+        runSearch(keyword);
       },
     };
   }
@@ -538,7 +731,7 @@
     flipReorder(prev);
     refreshPreview();
     api().set_output_order(next).then((cleaned) => {
-      if (cleaned && cleaned.join(" ") !== next.join(" ")) {
+      if (cleaned && cleaned.join(" ") !== next.join(" ")) {
         setState.output_order = cleaned;
         renderOrder();
       }
@@ -604,31 +797,125 @@
     refreshPreview();
   }
 
-  function wireTabs() {
-    const seg = $("tab-seg");
-    if (!seg) return;
-    seg.querySelectorAll(".opt").forEach((opt) => {
-      opt.addEventListener("click", async () => {
-        const toSettings = opt.dataset.tab === "settings";
-        $("viewer-view").hidden = toSettings;
-        $("settings-view").hidden = !toSettings;
-        $("viewer-controls").hidden = toSettings;
-        if (toSettings && !settingsLoaded) {
-          settingsLoaded = true;
-          await loadSettings();
-        } else if (toSettings) {
-          refreshPreview(); // output_order may have changed elsewhere
+  // ---- Keyword search ----
+
+  let searchHits = [];
+
+  async function runSearch(kw) {
+    const input = $("search-input");
+    if (typeof kw === "string") input.value = kw;
+    const q = input.value.trim();
+    if (!q) return;
+    $("search-meta").textContent = "";
+    $("search-results").innerHTML = `<div class="panel-loading">검색 중…</div>`;
+    renderSearch(await api().search(q));
+  }
+
+  function renderSearch(res) {
+    const host = $("search-results");
+    searchHits = res.hits || [];
+    if (!searchHits.length) {
+      $("search-meta").textContent = `"${res.keyword}" 검색 결과 없음`;
+      host.innerHTML = `<div class="panel-loading">검색 결과가 없습니다.</div>`;
+      return;
+    }
+    $("search-meta").textContent =
+      `"${res.keyword}" 결과 ${searchHits.length}건 · ${res.display} — 구절 클릭 시 복사`;
+    host.innerHTML = searchHits
+      .map(
+        (h, i) =>
+          `<div class="sr" data-i="${i}"><span class="sr-ref">${esc(h.short)} ${h.chapter}:${h.verse}</span><span class="sr-text">${esc(h.text)}</span></div>`
+      )
+      .join("");
+    host.querySelectorAll(".sr").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const h = searchHits[Number(el.dataset.i)];
+        const r = await api().copy_reference(h.book, h.chapter, [h.verse]);
+        if (r && r.ok) {
+          toast(`${h.short} ${h.chapter}:${h.verse} 복사됨`);
+          el.classList.add("copied");
+          setTimeout(() => el.classList.remove("copied"), 700);
         }
       });
     });
   }
 
+  function wireSearch() {
+    const go = $("search-go"), input = $("search-input");
+    if (go) go.addEventListener("click", () => runSearch());
+    if (input) {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") runSearch();
+      });
+    }
+  }
+
+  // ---- View switching (viewer / settings / search) ----
+
+  async function showView(name) {
+    $("viewer-view").hidden = name !== "viewer";
+    $("settings-view").hidden = name !== "settings";
+    $("search-view").hidden = name !== "search";
+    $("viewer-controls").hidden = name !== "viewer";
+    // rail active state (viewer / settings / search are rail icons)
+    [["nav-viewer", "viewer"], ["nav-settings", "settings"], ["nav-search", "search"]]
+      .forEach(([id, v]) => { const el = $(id); if (el) el.classList.toggle("on", name === v); });
+
+    if (name === "settings") {
+      if (!settingsLoaded) { settingsLoaded = true; await loadSettings(); }
+      else refreshPreview(); // output_order may have changed elsewhere
+    } else if (name === "search") {
+      const input = $("search-input");
+      if (input) input.focus();
+    }
+  }
+
+  function wireTabs() {
+    if ($("nav-viewer")) $("nav-viewer").addEventListener("click", () => showView("viewer"));
+    if ($("nav-settings")) $("nav-settings").addEventListener("click", () => showView("settings"));
+    if ($("nav-search")) $("nav-search").addEventListener("click", () => showView("search"));
+    wireSearch();
+  }
+
   function wireControls() {
+    const main = document.querySelector(".main");
     // Strong's chips (interlinear) + <num> cross-refs (lexicon) → lookup.
-    document.querySelector(".main").addEventListener("click", (e) => {
+    main.addEventListener("click", (e) => {
       const t = e.target.closest("[data-code]");
-      if (t) showStrong(t.dataset.code);
+      if (t) showStrong(t.dataset.code, t.dataset.v);
     });
+    // Right-click an original-language word / cross-ref → independent window.
+    main.addEventListener("contextmenu", (e) => {
+      const t = e.target.closest("[data-code]");
+      if (!t) return;
+      e.preventDefault();
+      hideTip();
+      api().open_dict_window(
+        t.dataset.code, lexLang, state.book, state.chapter, t.dataset.v || null,
+        document.documentElement.dataset.theme || "light"
+      );
+    });
+    // Hover an interlinear word → delayed preview tooltip.
+    const il = $("interlin");
+    il.addEventListener("mouseover", (e) => {
+      const t = e.target.closest(".strong[data-code]");
+      if (t) scheduleTip(t.dataset.code, t.dataset.v, e.clientX, e.clientY);
+    });
+    il.addEventListener("mouseout", (e) => {
+      if (e.target.closest(".strong[data-code]")) hideTip();
+    });
+    il.addEventListener("scroll", hideTip);
+    // Dictionary language toggle (한글/영어).
+    const langSeg = document.querySelector('.seg[data-seg="lang"]');
+    if (langSeg) {
+      langSeg.querySelectorAll(".opt").forEach((opt, i) => {
+        opt.addEventListener("click", () => {
+          lexLang = i === 0 ? "ko" : "en";
+          if (lexCur) showStrong(lexCur.code, lexCur.verse);
+        });
+      });
+    }
+    wireChipDnD(); // delegated live drag-reorder for the version chips
 
     $("book-pill").addEventListener("click", () => {
       openMenu(

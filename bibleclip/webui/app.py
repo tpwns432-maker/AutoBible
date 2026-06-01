@@ -28,6 +28,17 @@ def main():
         min_size=(900, 650),
     )
     api.set_window(window)  # lets the clipboard monitor push events back to JS
+
+    _popup_count = [0]
+
+    def _open_popup(title, html):
+        # Independent dict window (right-click). Unique name per call so
+        # pywebview doesn't reuse/replace an existing window.
+        _popup_count[0] += 1
+        webview.create_window(title, html=html, width=460, height=560,
+                              min_size=(360, 360))
+
+    api.set_popup_factory(_open_popup)
     webview.start()
 
 

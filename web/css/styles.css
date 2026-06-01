@@ -356,6 +356,62 @@ body {
 .lex-body b { font-weight: 700; }
 .lex-body sup { font-size: .72em; }
 
+/* ---- Lexicon: morphology block (형태소 분석, from 원전분해) ---- */
+.lex .morph {
+  border: 1px solid var(--card-border); border-radius: var(--r-md);
+  padding: 9px 11px; margin-bottom: 12px;
+  font-size: 12.5px; line-height: 1.7; color: var(--text-muted);
+}
+.lex .morph-h { color: var(--accent-text); font-weight: 700; font-size: 10.5px; margin-bottom: 3px; letter-spacing: .03em; }
+.lex .morph b { color: var(--text); }
+
+/* ---- Hover tooltip over original-language words ---- */
+.lex-tip {
+  position: fixed; z-index: 250; max-width: 360px;
+  background: var(--card-bg); color: var(--text-muted);
+  border: 1px solid var(--card-border); border-radius: var(--r-md);
+  box-shadow: 0 14px 40px -12px rgba(40, 25, 70, .45);
+  padding: 10px 13px; font-size: 12px; line-height: 1.6;
+  pointer-events: none;
+}
+.lex-tip .tip-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 2px; }
+/* original-language headword: larger than the dict body (per request) */
+.lex-tip .tip-heb { font-family: var(--font-heb); font-size: 30px; line-height: 1.1; color: var(--heb); }
+.lex-tip .tip-rom { font-size: 13px; font-weight: 700; color: var(--accent-text); }
+.lex-tip .tip-code { font-size: 11px; font-weight: 700; color: var(--accent-text); }
+.interlin .strong { cursor: pointer; }
+
+/* ===== Search view (검색) ===== */
+.search-view {
+  flex: 1; min-height: 0;
+  padding: 0 20px 18px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.search-bar { display: flex; gap: 8px; }
+.search-input {
+  flex: 1; font-family: inherit; font-size: 13px;
+  padding: 9px 13px; border-radius: var(--r-md);
+  border: 1px solid var(--pill-border); background: var(--card-bg); color: var(--text);
+  outline: none; transition: border-color .15s;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-dim); }
+.search-meta { font-size: 11.5px; color: var(--text-dim); padding: 0 2px; }
+.search-card { flex: 1; min-height: 0; }
+.search-card .card-body { padding: 8px 8px 8px 16px; }
+.sr {
+  padding: 9px 11px; margin-bottom: 6px; border-radius: var(--r-md);
+  border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.sr:hover { background: var(--pill-sel-bg); border-color: var(--card-border); }
+.sr.copied { background: var(--badge-ok-bg); border-color: var(--badge-ok-dot); }
+.sr-ref { font-size: 12px; font-weight: 700; color: var(--accent-text); margin-right: 8px; }
+.sr-text { font-size: 13px; color: var(--text); line-height: 1.7; }
+
+/* ---- Version chip drag-reorder ---- */
+.pill.sel[draggable="true"] { cursor: grab; }
+.pill.sel.dragging { opacity: .45; }
+
 /* ---- Loading / empty state ---- */
 .panel-loading { color: var(--text-dim); font-size: 12.5px; font-family: var(--font-ui); padding: 6px 0; }
 
