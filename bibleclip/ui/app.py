@@ -390,7 +390,9 @@ class BibleClipApp(
         self.status_label.pack(side=tk.LEFT, padx=10, pady=9, ipadx=8)
 
         self.dark_btn = ctk.CTkButton(
-            self.top_bar, text="다크 모드", command=self._toggle_dark_mode,
+            self.top_bar,
+            text="라이트 모드" if self.settings['dark_mode'] else "다크 모드",
+            command=self._toggle_dark_mode,
             font=(UI_FONT, 11), corner_radius=999, width=94, height=32,
             fg_color=CTK['btn'], hover_color=CTK['btn_hover'],
             text_color=CTK['btn_text'])
