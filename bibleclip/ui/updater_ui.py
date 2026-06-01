@@ -305,6 +305,7 @@ class UpdateMixin:
         """Hard-exit used right before the external updater swaps files."""
         try:
             self.monitoring = False
+            self.core.stop_monitoring()
             self._save_settings()
         except Exception:
             pass
@@ -421,6 +422,7 @@ class UpdateMixin:
 
     def _on_close(self):
         self.monitoring = False
+        self.core.stop_monitoring()
         self._capture_sash_positions()
         self._save_settings()
         for db in self.bible_dbs.values():

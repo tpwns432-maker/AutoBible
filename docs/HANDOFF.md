@@ -1,7 +1,7 @@
 # BibleClip — 작업 인계 노트 (HANDOFF)
 
 > 대화를 `/clear` 한 뒤 다음 세션이 빠르게 이어받기 위한 문서.
-> 최종 업데이트: **v1.5.3 릴리스 준비** (2026-06-01) — 버전/CHANGELOG 반영 완료, 태그/푸시는 빌드 확인 후.
+> 최종 업데이트: **v1.5.3 릴리스 완료** (2026-06-01) — main 머지·태그·CI 배포 모두 끝. CI green, Win zip + Mac zip + dmg 게시 완료.
 
 ---
 
@@ -11,10 +11,11 @@
 - **GitHub 저장소 이름은 역사적 이유로 `AutoBible` 유지** (앱 이름만 BibleClip). 저장소: `tpwns432-maker/AutoBible`.
 
 ## 2. 현재 상태
-- **최신 릴리스: v1.5.2** (CI green, Windows zip + macOS zip + dmg 배포 완료).
-- **v1.5.3 릴리스 준비 중** — 브랜치 `feat/v1.5.3-settings-ctk`. 설정 탭 CTk화 + 사전 팝업
-  z-order 수정 완료, 버전/CHANGELOG 반영 완료. **아직 main 머지·태그·CI 배포 전.**
+- **최신 릴리스: v1.5.3** (CI green, Windows zip + macOS zip + dmg 배포 완료 — 2026-06-01 게시).
+  설정 탭 CTk화 + 사전 팝업 z-order 수정 포함. main 머지·태그·CI 배포 모두 완료, 작업 브랜치 삭제됨.
 - `main` 브랜치가 곧 배포본. 작업용 브랜치는 머지 후 삭제함.
+- **진행 중: High(pywebview 웹) 리라이트 — 리디자인 리포트의 ③단계.** 브랜치 `feat/web-engine-facade`(병행 전략: CTk 앱은 계속 배포, 웹 UI는 기능 동등 도달 시 전환).
+  **Phase 0(엔진 파사드) 완료** — 아래 §9 참고. 미커밋 상태일 수 있음.
 - 그동안의 큰 작업:
   - **v1.5.1** — 단일 파일 `autobible.py`(3,764줄)를 `bibleclip/` 패키지로 모듈화 + 네이밍 정리.
   - **v1.5.2** — UI 현대화(리디자인 "Medium" 단계, CustomTkinter) — 설정 탭 제외.
@@ -106,3 +107,16 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - 리디자인 원본: `docs/redesign-report.html` (Low/Medium/High 3단계 목업·워크플로우). v1.5.2 = **Medium** 구현.
 - 리팩터링 파이프라인: `docs/pipelines/통합_파이프라인.html` 등.
 - macOS 빌드: `docs/BUILD_MAC.md`.
+
+## 9. High(pywebview 웹) 리라이트 — 진행 상황 (브랜치 `feat/web-engine-facade`)
+리포트 ③단계. **전략: 별도 브랜치 병행** — CTk(main)는 계속 배포본, 웹 UI가 기능 동등 도달 시 전환.
+
+**Phase 0 — 엔진 파사드 추출 (✅ 완료, 동작 변경 없음):**
+- 신규 `bibleclip/core/library.py` `class Library` — **모든 비-UI 상태/로직의 단일 출처**(DB·원어·사전·`settings`·참조→출력 파이프라인·검색·모니터링). tkinter 비의존(`import bibleclip.core.library`가 tkinter를 끌어오지 않음 — 검증됨). 웹 UI가 그대로 import해서 쓸 API: `parse_reference / get_chapter(s) / search / lookup_strong(원시 마크업 반환) / interlinear / build_output(text)→{kind:reference|keyword,…} / start_monitoring / stop_monitoring / notify_clipboard_written`.
+- 신규 `bibleclip/core/clipboard_monitor.py` `class ClipboardMonitor` — 주입식 read/write 콜백 기반 감시 루프(`last`로 자기출력 재감지 방지).
+- `ui/app.py`: `self.core=Library()` 후 **별칭 배선**(`self.bible_dbs=self.core.dbs`, `self.settings=self.core.settings`, `bethlehem_*`, `lexicon_*` — 공유 참조라 믹스인 전부 무수정). `_load_*`/`_save_settings`/`_process_clipboard`/`_monitor_loop` 로직은 코어로 이동, 앱엔 얇은 위임만(`_bethlehem_ready`,`_refresh_databases`,`_save_settings`는 geometry 스탬프용). `DEFAULT_SETTINGS`는 `Library`로 이동(+클래스 별칭).
+- 수동 복사(`viewer_ops`/`search`)·종료(`updater_ui` `_on_close`/`_quit_for_update`)는 `core.notify_clipboard_written` / `core.stop_monitoring`로 라우팅.
+- `data/original_lang.py`: 모듈 상단 `import tkinter`를 `render_dict_html` 내부 지연 import로(코어 tk-free화).
+- **검증**: `python -X utf8 tests/test_core.py`(헤드리스 코어 스모크 — parse/get_chapter/build_output/search/lexicon/interlinear, **save_settings 호출 X**). + 헤드리스 CTk 렌더·별칭 배선 확인. + 가짜 클립보드로 모니터 통합(재처리 방지·키워드·수동복사 가드) 확인. 전부 통과.
+
+**남은 Phase (다음 세션):** 1 디자인 시스템(CSS 토큰) · 2 pywebview 브리지+실제 장 렌더(웹 클립보드 백엔드 결정 지점) · 3 3패널+사전 마크업→HTML 변환기 · 4 폴리싱·상태 · 5 패키징·서명. (WebView2는 Win11 기본 탑재.)

@@ -711,7 +711,8 @@ class ViewerOpsMixin:
             return
         result = '\n\n'.join(parts)
         self._clipboard_write(result)
-        self.last_clipboard = result
+        # Tell the monitor we wrote this, so it isn't re-detected as input.
+        self.core.notify_clipboard_written(result)
         verse_str = Formatter._format_verse_list(verse_nums, self.settings.get('range_symbol', '-'))
         self._append_log(f"[복사] {chapter}:{verse_str} → {len(parts)}개 버전\n")
 

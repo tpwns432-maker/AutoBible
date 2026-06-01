@@ -65,15 +65,18 @@ class MonitorMixin:
     def _toggle_monitoring(self):
         if self.monitoring:
             self.monitoring = False
+            self.core.stop_monitoring()
             self.monitor_btn.configure(text="모니터링 시작")
             self._update_status("대기 중", False)
         else:
             self.monitoring = True
             self.monitor_btn.configure(text="모니터링 중지")
             self._update_status("모니터링 중", True)
-            self.last_clipboard = self._clipboard_read()
-            self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
-            self.monitor_thread.start()
+            # The core owns the watch loop; we inject the platform clipboard
+            # backend and receive structured callbacks (on this worker thread).
+            self.core.start_monitoring(
+                self._clipboard_read, self._clipboard_write,
+                self._on_reference_caught, self._on_keyword_caught)
 
     def _clipboard_read(self):
         """Read clipboard text. On macOS, tkinter's clipboard_get can't fetch
@@ -105,62 +108,20 @@ class MonitorMixin:
         except Exception:
             pass
 
-    def _monitor_loop(self):
-        while self.monitoring:
-            try:
-                current = self._clipboard_read()
-                if current != self.last_clipboard and current.strip():
-                    self.last_clipboard = current
-                    self._process_clipboard(current.strip())
-            except Exception:
-                pass
-            time.sleep(0.5)
+    # ---- Core monitor callbacks (invoked on the watch worker thread) ----
 
-    def _process_clipboard(self, text):
-        # "#키워드" → keyword search (show results, copy the first verse)
-        if text.startswith('#'):
-            keyword = text[1:].strip()
-            if keyword:
-                self.last_clipboard = text
-                self.root.after(0, lambda kw=keyword: self._run_search(kw, copy_first=True))
-            return
-        refs = Engine.parse_reference(text)
-        if not refs:
-            return
-        book_num, short_name, long_name, chapter, verses = refs[0]
-        order = self.settings['output_order']
-        if not order:
-            return
+    def _on_reference_caught(self, r):
+        """A reference was caught and its formatted multi-version output was
+        already written to the clipboard by the core; reflect it in the UI."""
+        book_num, chapter, verses = r['book_num'], r['chapter'], r['verses']
+        short_name, n_parts = r['short_name'], r['n_parts']
+        self.root.after(0, lambda: self._update_viewer_from_ref(book_num, chapter, verses))
+        self.root.after(0, lambda: self._append_log_ref(
+            book_num, chapter, verses, short_name, n_parts))
 
-        fmt = Formatter(self.settings, self.bible_dbs)
-        parts = []
-        for ver_name in order:
-            if ver_name not in self.bible_dbs:
-                continue
-            db = self.bible_dbs[ver_name]
-            if book_num not in db.books:
-                continue
-            if verses:
-                verse_data = [(v, db.get_verse_text(book_num, chapter, v)) for v in verses]
-            else:
-                verse_data = db.get_verses(book_num, chapter)
-            verse_data = [(v, t) for v, t in verse_data if t]
-            if not verse_data:
-                continue
-            actual_verses = [v for v, _ in verse_data]
-            result = fmt.format_version_output(db, book_num, chapter, actual_verses, verse_data)
-            if result:
-                parts.append(result)
-
-        if parts:
-            result = '\n\n'.join(parts)
-            self._clipboard_write(result)
-            self.last_clipboard = result
-
-            self.root.after(0, lambda: self._update_viewer_from_ref(book_num, chapter, verses))
-
-            self.root.after(0, lambda: self._append_log_ref(
-                book_num, chapter, verses, short_name, len(parts)))
+    def _on_keyword_caught(self, keyword):
+        """A '#keyword' query was caught — run the in-app search (copies first)."""
+        self.root.after(0, lambda kw=keyword: self._run_search(kw, copy_first=True))
 
     def _update_viewer_from_ref(self, book_num, chapter, verses):
         primary = self._get_primary_version()

@@ -139,7 +139,7 @@ class SearchMixin:
         if not result:
             return
         self._clipboard_write(result)
-        self.last_clipboard = result
+        self.core.notify_clipboard_written(result)
         short = '?'
         for db in self.bible_dbs.values():
             if book_num in db.books:

@@ -2,7 +2,6 @@
 import os
 import re
 import sqlite3
-import tkinter as tk
 
 from bibleclip.config import BASE_DIR, candidate_data_roots, BODY_FONT
 
@@ -153,6 +152,7 @@ def render_dict_html(text_widget, html, base_font=(BODY_FONT, 10), fg='#000000',
 
     Handles a small subset: <font color>, <b>, <br>, <sup>, <num>, '^' separator.
     """
+    import tkinter as tk  # local: keeps this module importable without a display
     from html.parser import HTMLParser
 
     text_widget.configure(state=tk.NORMAL)

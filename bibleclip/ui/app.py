@@ -53,6 +53,7 @@ from bibleclip.data.original_lang import (
 )
 
 from bibleclip.core.engine import Engine
+from bibleclip.core.library import Library
 from bibleclip.data.bible_db import BibleDB
 
 
@@ -85,31 +86,9 @@ class BibleClipApp(
     ThemeMixin,
     UpdateMixin,
 ):
-    DEFAULT_SETTINGS = {
-        'book_name': 'short_ko',        # short_ko, long_ko, short_en, long_en
-        'chapter_verse_format': 'colon', # colon, korean
-        'bracket_style': 'none',         # none, [], ()
-        'ref_position': 'before',        # before, after
-        'range_symbol': '-',             # -, ~
-        'ref_body_separator': ' ',       # ' ' (space), ' - ' (hyphen), ': ' (colon)
-        'show_version_header': True,
-        'hide_reference': False,
-        'output_mode': 'inline',         # inline, newline
-        'newline_show_cv': False,        # show chapter:verse on each line
-        'output_order': [],              # ordered list of version names
-        'viewer_versions': [],           # checked versions in viewer (ordered subset)
-        'viewer_version_order': [],      # full viewer ordering (checked + unchecked)
-        'viewer_font_size': 11,
-        'auto_update_check': True,
-        'skip_update_version': '',
-        'dark_mode': False,
-        'geometry': '1100x780',
-        'last_book_num': None,           # remember last viewed book/chapter
-        'last_chapter': None,
-        'viewer_hsash': [],              # horizontal 3-panel sash x positions
-        'viewer_vsash': None,            # vertical (panels/log) sash y position
-        'lex_popup_size': '440x480',     # size for new independent dict windows
-    }
+    # Settings schema/defaults now live on Library (the UI-agnostic core).
+    # Kept as a class alias for any code that referenced BibleClipApp.DEFAULT_SETTINGS.
+    DEFAULT_SETTINGS = Library.DEFAULT_SETTINGS
 
     def __init__(self, root):
         self.root = root
@@ -123,12 +102,20 @@ class BibleClipApp(
             except Exception:
                 pass
 
-        # State
-        self.bible_dbs = {}
+        # Core: the UI-agnostic engine (bible DBs, original-language data,
+        # settings, reference→output pipeline, clipboard monitor). The alias
+        # attributes below share the same dicts/objects by reference, so the
+        # existing mixin code keeps working unchanged.
+        self.core = Library()
+        self.bible_dbs = self.core.dbs
+        self.settings = self.core.settings
+        self.bethlehem_strongs = self.core.bethlehem_strongs
+        self.bethlehem_wonjun = self.core.bethlehem_wonjun
+        self.lexicon_ko = self.core.lexicon_ko
+        self.lexicon_en = self.core.lexicon_en
+
+        # UI-only state
         self.monitoring = False
-        self.monitor_thread = None
-        self.last_clipboard = ''
-        self.settings = dict(self.DEFAULT_SETTINGS)
         self._sync_lock = False        # viewer ↔ middle scroll sync guard
         self._sync_pending = False     # debounce pending
         self._tip = None               # hover tooltip window
@@ -138,12 +125,8 @@ class BibleClipApp(
         self._lex_popups = []          # open independent dictionary windows
         self._search_results = []      # current search results (book, chap, verse)
 
-        # Load databases
-        self._load_databases()
-        self._load_bethlehem()
-
-        # Load settings
-        self._load_settings()
+        # Apply saved window geometry (Library loads/validates settings headlessly).
+        self.root.geometry(self.settings.get('geometry', '1100x780'))
 
         self.theme = DARK_THEME if self.settings['dark_mode'] else LIGHT_THEME
         ctk.set_appearance_mode('dark' if self.settings['dark_mode'] else 'light')
@@ -173,147 +156,23 @@ class BibleClipApp(
         if self.settings.get('auto_update_check', True):
             self._start_update_check()
 
-    # ---- Database ----
-
-    def _load_databases(self):
-        db_dir = resolve_data_dir(BIBLE_DIR)
-        if not os.path.isdir(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-            return
-        for fname in sorted(os.listdir(db_dir)):
-            if fname.lower().endswith(('.sqlite3', '.sqlite', '.db')):
-                path = os.path.join(db_dir, fname)
-                try:
-                    db = BibleDB(path)
-                    self.bible_dbs[db.name] = db
-                except Exception as e:
-                    print(f"Error loading {fname}: {e}")
-
-    def _load_bethlehem(self):
-        """Load KRV-with-Strong's + lexicons from the original_lang folder."""
-        self.bethlehem_strongs = None  # 개역한글S — KRV-based, drives middle panel
-        self.bethlehem_wonjun = None   # 원전분해 — kept for potential future use
-        self.lexicon_ko = None
-        self.lexicon_en = None
-        bdir = resolve_original_lang_dir(BASE_DIR)
-        if not os.path.isdir(bdir):
-            return
-        strongs_path = os.path.join(bdir, '개역한글S.sdb')
-        if os.path.exists(strongs_path):
-            try:
-                self.bethlehem_strongs = BethlehemDB(strongs_path)
-            except Exception as e:
-                print(f"개역한글S load error: {e}")
-        wonjun_path = os.path.join(bdir, '원전분해.sdb')
-        if os.path.exists(wonjun_path):
-            try:
-                self.bethlehem_wonjun = BethlehemDB(wonjun_path)
-            except Exception as e:
-                print(f"원전분해 load error: {e}")
-        for fname, attr in (('HebGrkKo.dct', 'lexicon_ko'),
-                            ('HebGrkEn.dct', 'lexicon_en')):
-            p = os.path.join(bdir, fname)
-            if os.path.exists(p):
-                try:
-                    setattr(self, attr, Lexicon(p))
-                except Exception as e:
-                    print(f"{fname} load error: {e}")
+    # ---- Database / settings (delegated to the core) ----
+    # The heavy lifting lives in bibleclip.core.library.Library; these thin
+    # wrappers remain because UI mixins call them and they bridge UI-only
+    # concerns (window geometry, refreshing the version list).
 
     def _bethlehem_ready(self):
-        return bool(self.bethlehem_strongs and (self.lexicon_ko or self.lexicon_en))
+        return self.core.bethlehem_ready()
 
     def _refresh_databases(self):
-        """Rescan bible_versions folder for new DB files."""
-        db_dir = resolve_data_dir(BIBLE_DIR)
-        if not os.path.isdir(db_dir):
-            return
-        existing = set(self.bible_dbs.keys())
-        for fname in sorted(os.listdir(db_dir)):
-            if fname.lower().endswith(('.sqlite3', '.sqlite', '.db')):
-                name = os.path.splitext(fname)[0]
-                if name not in existing:
-                    path = os.path.join(db_dir, fname)
-                    try:
-                        db = BibleDB(path)
-                        self.bible_dbs[db.name] = db
-                    except Exception:
-                        pass
-        # Update available list
+        """Rescan for new DB files, then refresh the available-version list."""
+        self.core.refresh_databases()
         self._refresh_available_list()
 
-    # ---- Settings ----
-
-    def _load_settings(self):
-        path = os.path.join(BASE_DIR, SETTINGS_FILE)
-        # One-time migration: if the new file doesn't exist yet but the legacy
-        # autobible_settings.json does, read from it. The next _save_settings
-        # writes the new file; the legacy file is left untouched (rollback-safe).
-        if not os.path.exists(path):
-            legacy = os.path.join(BASE_DIR, LEGACY_SETTINGS_FILE)
-            if os.path.exists(legacy):
-                path = legacy
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    saved = json.load(f)
-                for k, v in saved.items():
-                    if k in self.settings:
-                        self.settings[k] = v
-                geo = self.settings.get('geometry', '1100x780')
-                self.root.geometry(geo)
-            except Exception:
-                self.root.geometry('1100x780')
-        else:
-            self.root.geometry('1100x780')
-
-        # Validate output_order. When empty (fresh install), default to a
-        # Korean version so clipboard monitoring produces output immediately
-        # instead of silently doing nothing.
-        valid_order = [n for n in self.settings['output_order'] if n in self.bible_dbs]
-        if not valid_order and self.bible_dbs:
-            versions = list(self.bible_dbs.keys())
-            korean_pref = [v for v in ('KRV', 'NRKV', 'KNRSV') if v in versions]
-            valid_order = [korean_pref[0] if korean_pref else versions[0]]
-        self.settings['output_order'] = valid_order
-
-        # Validate viewer_versions; default to KRV (or next-best Korean) when empty.
-        valid_viewer = [n for n in self.settings.get('viewer_versions', []) if n in self.bible_dbs]
-        # Migration from v1.0.0: previous default was alphabetical ['KNRSV'].
-        # If the saved choice is exactly that default and KRV is available, switch.
-        if valid_viewer == ['KNRSV'] and 'KRV' in self.bible_dbs:
-            valid_viewer = ['KRV']
-        if not valid_viewer and self.bible_dbs:
-            versions = list(self.bible_dbs.keys())
-            korean_pref = [v for v in ('KRV', 'NRKV', 'KNRSV') if v in versions]
-            valid_viewer = [korean_pref[0] if korean_pref else versions[0]]
-        self.settings['viewer_versions'] = valid_viewer
-
-        # Validate viewer_version_order: must contain all loaded DBs in some order.
-        saved_order = [n for n in self.settings.get('viewer_version_order', []) if n in self.bible_dbs]
-        # Append any DBs missing from saved order (new files since last run)
-        for n in self.bible_dbs:
-            if n not in saved_order:
-                saved_order.append(n)
-        # Ensure checked versions appear in the order they were saved as checked
-        if not saved_order:
-            saved_order = list(self.bible_dbs.keys())
-        self.settings['viewer_version_order'] = saved_order
-
-        # Clamp font size
-        try:
-            self.settings['viewer_font_size'] = int(self.settings.get('viewer_font_size', 11))
-        except (TypeError, ValueError):
-            self.settings['viewer_font_size'] = 11
-        self.settings['viewer_font_size'] = max(8, min(30, self.settings['viewer_font_size']))
-
     def _save_settings(self):
+        # Stamp the live window size before persisting (UI-only field).
         self.settings['geometry'] = self.root.geometry()
-        path = os.path.join(BASE_DIR, SETTINGS_FILE)
-        try:
-            with open(path, 'w', encoding='utf-8') as f:
-                json.dump(self.settings, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        self.core.save_settings()
 
     def _get_format_settings(self):
         """Read current UI state into settings dict."""
