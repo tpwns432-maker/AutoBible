@@ -187,13 +187,17 @@ class ViewerOpsMixin:
             others = [n for n in order if n != drag_name]
             dw = wd[drag_name]
             drag_center = drag_x + dw / 2
-            # fixed resting centers of the others (NO gap) — stable reference,
-            # so the threshold is the same whether moving left or right.
-            cum, centers = pad, []
-            for n in others:
-                centers.append(cum + wd[n] / 2)
-                cum += wd[n] + gap
-            insert_idx = sum(1 for c in centers if drag_center > c)
+            # Compare the dragged center against each neighbour's TRUE resting
+            # center (full layout, dragged chip still in its own slot). Using the
+            # compacted 'others' centers pulled the right-side thresholds left,
+            # so right swaps fired almost immediately — the asymmetry the user
+            # felt. Full-layout centers make left/right perfectly symmetric:
+            # a swap happens exactly when centers cross.
+            full_c, fx = {}, pad
+            for n in order:
+                full_c[n] = fx + wd[n] / 2
+                fx += wd[n] + gap
+            insert_idx = sum(1 for n in others if full_c[n] < drag_center)
             x = pad
             for i, n in enumerate(others):
                 if i == insert_idx:
@@ -201,7 +205,7 @@ class ViewerOpsMixin:
                 targets[n] = x
                 x += wd[n] + gap
             # dragged chip tracks the cursor immediately (no easing), clamped
-            fw = max(self.chip_frame.winfo_width(), int(cum + dw + gap))
+            fw = max(self.chip_frame.winfo_width(), int(x + gap))
             clamped = max(pad, min(int(drag_x), fw - dw - pad))
             self._chip_cur_x[drag_name] = clamped
             w = self.viewer_chip_widgets[drag_name]
