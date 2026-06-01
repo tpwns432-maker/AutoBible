@@ -103,6 +103,8 @@ class ViewerOpsMixin:
             state['dragging'] = False
             # cursor offset within the chip, so it doesn't jump when grabbed
             state['grab_dx'] = event.x_root - outer.winfo_rootx()
+            # current insertion slot among the others = chip's home index
+            self._drag_idx = self._viewer_order.index(name)
             self._set_viewer_focused(name)
 
         def on_motion(event):
@@ -185,19 +187,38 @@ class ViewerOpsMixin:
             self._drag_target_order = order
         else:
             others = [n for n in order if n != drag_name]
+            m = len(others)
             dw = wd[drag_name]
             drag_center = drag_x + dw / 2
-            # Compare the dragged center against each neighbour's TRUE resting
-            # center (full layout, dragged chip still in its own slot). Using the
-            # compacted 'others' centers pulled the right-side thresholds left,
-            # so right swaps fired almost immediately — the asymmetry the user
-            # felt. Full-layout centers make left/right perfectly symmetric:
-            # a swap happens exactly when centers cross.
-            full_c, fx = {}, pad
-            for n in order:
-                full_c[n] = fx + wd[n] / 2
-                fx += wd[n] + gap
-            insert_idx = sum(1 for n in others if full_c[n] < drag_center)
+            # compact left positions of the others (dragged removed)
+            pre, xx = [], pad
+            for n in others:
+                pre.append(xx)
+                xx += wd[n] + gap
+            pre.append(xx)
+            # Shift the insertion slot one neighbour at a time. Swap when the
+            # dragged CENTER crosses the midpoint between its current empty slot
+            # center and the adjacent neighbour's CURRENT (gap-aware) center.
+            # The boundary is identical in both directions → symmetric, and it
+            # tracks where chips actually are, so moved/unmoved chips behave the
+            # same (no "must reach the far edge" feel).
+            idx = max(0, min(getattr(self, '_drag_idx', m), m))
+            while idx < m:                       # consider moving right
+                gap_c = pre[idx] + dw / 2
+                right_c = pre[idx] + dw + gap + wd[others[idx]] / 2
+                if drag_center > (gap_c + right_c) / 2:
+                    idx += 1
+                else:
+                    break
+            while idx > 0:                       # consider moving left
+                gap_c = pre[idx] + dw / 2
+                left_c = pre[idx - 1] + wd[others[idx - 1]] / 2
+                if drag_center < (gap_c + left_c) / 2:
+                    idx -= 1
+                else:
+                    break
+            self._drag_idx = idx
+            insert_idx = idx
             x = pad
             for i, n in enumerate(others):
                 if i == insert_idx:
