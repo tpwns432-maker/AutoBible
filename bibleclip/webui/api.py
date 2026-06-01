@@ -222,7 +222,35 @@ class Api:
             'viewer': list(self.lib.settings.get('viewer_versions', [])),
             'books': books,
             'last': {'version': primary, 'book': last_book, 'chapter': last_chapter},
+            'dark_mode': bool(s.get('dark_mode')),
+            'font_size': int(s.get('viewer_font_size', 11)),
         }
+
+    # ---- UI preferences (persisted; shared with the desktop app) ----
+
+    def set_dark_mode(self, on):
+        self.lib.settings['dark_mode'] = bool(on)
+        self.lib.save_settings()
+        return {'ok': True}
+
+    def set_font_size(self, size):
+        try:
+            size = int(size)
+        except (TypeError, ValueError):
+            size = 11
+        size = max(8, min(30, size))
+        self.lib.settings['viewer_font_size'] = size
+        self.lib.save_settings()
+        return size
+
+    def note_position(self, book, chapter):
+        """Remember the last viewed book/chapter (saved to disk on window close
+        or on the next settings write — cheap, no immediate disk I/O)."""
+        try:
+            self.lib.settings['last_book_num'] = int(book)
+            self.lib.settings['last_chapter'] = int(chapter)
+        except (TypeError, ValueError):
+            pass
 
     def set_viewer_versions(self, names):
         """Replace the set of versions shown in parallel in the viewer.

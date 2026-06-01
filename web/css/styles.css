@@ -58,6 +58,12 @@ body {
 .rail .nav-icon.on { background: var(--rail-icon-on-bg); color: var(--rail-icon-on); }
 .rail .spacer { flex: 1; }
 
+/* Dark-mode toggle: the moon fills in when dark mode is active (and empties
+   in light mode) so its state is obvious at a glance. */
+#theme-toggle svg path { transition: fill .15s; }
+[data-theme="dark"] #theme-toggle { color: #FFD66B; }
+[data-theme="dark"] #theme-toggle svg path { fill: #FFD66B; }
+
 /* ---- Main column ---- */
 .main {
   flex: 1;
@@ -278,7 +284,8 @@ body {
 }
 
 /* ---- Scripture panel (sans-serif body; Strong's codes hidden here) ---- */
-.scripture { font-family: var(--font-ui); font-size: var(--fs-scripture); line-height: var(--lh-scripture); color: var(--text); }
+/* font-size scales with the A−/A+ control (--reading-scale). */
+.scripture { font-family: var(--font-ui); font-size: calc(var(--fs-scripture) * var(--reading-scale)); line-height: var(--lh-scripture); color: var(--text); }
 .scripture .v { margin-bottom: 11px; }
 .scripture .v.multi { margin-bottom: 15px; }
 .scripture .vnum {
@@ -306,7 +313,7 @@ body {
 .strong:hover { color: var(--accent); }
 
 /* ---- Interlinear panel ---- */
-.interlin { font-size: 13px; line-height: var(--lh-scripture); color: var(--text); }
+.interlin { font-size: calc(13px * var(--reading-scale)); line-height: var(--lh-scripture); color: var(--text); }
 .interlin .v { margin-bottom: 10px; }
 .interlin .vnum { color: var(--vtag); font-weight: 800; margin-right: 4px; }
 
@@ -319,7 +326,7 @@ body {
 .lex .lex-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .lex .lex-head .heb { font-family: var(--font-heb); font-size: var(--fs-heb); line-height: 1.15; color: var(--heb); }
 .lex .lex-head .rom { color: var(--rom); font-weight: 700; font-size: 15px; }
-.lex .lex-body { font-size: 12.5px; line-height: 1.8; color: var(--text-muted); }
+.lex .lex-body { font-size: calc(12.5px * var(--reading-scale)); line-height: 1.8; color: var(--text-muted); }
 .lex .lex-body p { margin-bottom: 8px; }
 
 /* ---- Scrollbars (web view) ---- */

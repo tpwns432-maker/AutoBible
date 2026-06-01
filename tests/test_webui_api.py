@@ -88,6 +88,7 @@ def main():
     assert init['books'], "no books"
     last = init['last']
     assert last['book'] and last['chapter'], last
+    assert isinstance(init['dark_mode'], bool) and isinstance(init['font_size'], int)
     print(f"get_initial: primary={init['primary']} versions={len(init['versions'])} "
           f"books={len(init['books'])} last={last['book']}:{last['chapter']}")
 
@@ -205,6 +206,15 @@ def main():
 
     # open_dict_window is a no-op without a popup factory (headless)
     assert api.open_dict_window('H3068') == {'ok': False}
+
+    # UI prefs (save_settings still stubbed): clamp + persist into settings
+    assert api.set_font_size(40) == 30 and api.lib.settings['viewer_font_size'] == 30
+    assert api.set_font_size(2) == 8
+    api.set_dark_mode(True)
+    assert api.lib.settings['dark_mode'] is True
+    api.note_position(500, 3)
+    assert api.lib.settings['last_book_num'] == 500 and api.lib.settings['last_chapter'] == 3
+    print("ui prefs (font/dark/position) OK")
 
     monitor_check()
 

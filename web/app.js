@@ -16,7 +16,9 @@
   const themeBtn = $("theme-toggle");
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
-      root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      const dark = root.dataset.theme !== "dark";
+      root.dataset.theme = dark ? "dark" : "light";
+      if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dark_mode(dark);
     });
   }
 
@@ -136,7 +138,12 @@
   const state = {
     version: null, book: null, chapter: null,
     versions: [], viewer: [], books: [], chapters: [], monitoring: false,
+    fontSize: 11,
   };
+
+  function applyFontScale() {
+    root.style.setProperty("--reading-scale", (state.fontSize / 11).toFixed(3));
+  }
 
   async function boot() {
     const init = await api().get_initial();
@@ -146,6 +153,10 @@
     state.books = init.books;
     state.book = init.last.book;
     state.chapter = init.last.chapter;
+    // Restore persisted UI prefs (shared with the desktop app).
+    root.dataset.theme = init.dark_mode ? "dark" : "light";
+    state.fontSize = init.font_size || 11;
+    applyFontScale();
     renderVerChips();
     state.chapters = await api().get_chapters(state.version, state.book);
     if (!state.chapters.includes(state.chapter)) {
@@ -351,6 +362,7 @@
     const cols = want.map((name, i) => ({ name, verses: (chaps[i] && chaps[i].verses) || [] }));
     renderScripture(cols, highlight);
     renderInterlinear(inter);
+    api().note_position(state.book, state.chapter); // remembered, saved on close
   }
 
   // cols: [{name, verses:[{n,text}]}], in display order. The first column's
@@ -916,6 +928,17 @@
       });
     }
     wireChipDnD(); // delegated live drag-reorder for the version chips
+
+    // Font size A− / A+ (persisted as viewer_font_size).
+    const changeFont = (d) => {
+      const n = Math.max(8, Math.min(30, state.fontSize + d));
+      if (n === state.fontSize) return;
+      state.fontSize = n;
+      applyFontScale();
+      api().set_font_size(n);
+    };
+    if ($("font-dec")) $("font-dec").addEventListener("click", () => changeFont(-1));
+    if ($("font-inc")) $("font-inc").addEventListener("click", () => changeFont(1));
 
     $("book-pill").addEventListener("click", () => {
       openMenu(

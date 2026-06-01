@@ -50,6 +50,8 @@ class Library:
         'viewer_hsash': [],               # horizontal 3-panel sash x positions
         'viewer_vsash': None,             # vertical (panels/log) sash y position
         'lex_popup_size': '440x480',      # size for new independent dict windows
+        'web_geometry': None,             # {w,h,x,y} for the web UI window (web-only;
+                                          # kept separate from tk 'geometry')
     }
 
     def __init__(self):

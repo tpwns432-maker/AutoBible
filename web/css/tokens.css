@@ -73,6 +73,7 @@
   --fs-scripture: 14.5px;
   --lh-scripture: 1.9;
   --fs-heb: 48px;          /* lexicon headword (original-language) — prominent */
+  --reading-scale: 1;      /* A−/A+ font-size multiplier (viewer_font_size/11) */
 
   /* ---- Spacing scale (4px base) ---- */
   --sp-1: 4px;

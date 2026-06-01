@@ -20,14 +20,34 @@ def main():
 
     library = Library()
     api = Api(library)
+
+    # Restore the last web-window size/position (separate from the desktop app's
+    # tk-format 'geometry' so the two UIs don't clobber each other's window).
+    geo = library.settings.get('web_geometry') or {}
+    kw = dict(width=int(geo.get('w') or 1100), height=int(geo.get('h') or 780))
+    if geo.get('x') is not None and geo.get('y') is not None:
+        kw['x'], kw['y'] = int(geo['x']), int(geo['y'])
+
     window = webview.create_window(
         f"BibleClip v{__version__}",
         url=_index_path(),
         js_api=api,
-        width=1100, height=780,
         min_size=(900, 650),
+        **kw,
     )
     api.set_window(window)  # lets the clipboard monitor push events back to JS
+
+    def _on_closing():
+        # Persist window geometry + any in-memory state (last position, etc.).
+        try:
+            library.settings['web_geometry'] = {
+                'w': window.width, 'h': window.height, 'x': window.x, 'y': window.y,
+            }
+        except Exception:
+            pass
+        library.save_settings()
+
+    window.events.closing += _on_closing
 
     _popup_count = [0]
 

@@ -170,4 +170,18 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - ⚠️ 편집 중 `web/app.js`에 NUL 바이트 2개 혼입된 적 있음(`join(" ")`가 `join("\x00")`로) → 제거함. 커밋/실행 전 `python -c "open('web/app.js','rb').read().count(b'\x00')"`로 점검 권장.
 - **검증**: `tests/test_webui_api.py` 대폭 확장(lookup_strong headword/reading/morph, hover_summary, search+copy_reference[clipboard 스텁], set_viewer_order, open_dict_window 무팩토리 no-op; **save_settings 스텁**). 사용자 실창 OK 전 항목.
 
-**남은 Phase:** 4 폴리싱·상태(글자 크기 A±·테마 지속·창 위치 등) · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 4 — 상태 지속·폴리싱 (✅ 완료, 사용자 OK):**
+- `api`: `get_initial`에 `dark_mode`/`font_size` 추가. `set_dark_mode(on)`·`set_font_size(size)`(8~30 클램프)·`note_position(book,chapter)`(메모리만; 종료 시 저장).
+- `app.py`: 시작 시 `settings['web_geometry']`(웹 전용 키 — CTk tk `geometry`와 분리)로 창 크기·위치 복원, `window.events.closing`에서 `web_geometry` 스탬프 + `library.save_settings()`(마지막 위치 등 일괄 저장).
+- `web/`: A−/A+ → `--reading-scale`(=`font_size/11`)로 본문·원어·사전 글자 크기, persist. 달 아이콘 테마 토글이 `dark_mode` 저장. 마지막 위치는 `loadChapter`마다 `note_position`. 부팅 시 테마/글자크기 복원.
+- **달 아이콘 패치**: 다크 모드일 때 달이 노란색(`#FFD66B`)으로 채워지고 라이트일 때 외곽선만 — 상태 직관화(`[data-theme="dark"] #theme-toggle svg path{fill}`).
+- **검증**: `tests/test_webui_api.py`(set_font_size 클램프·set_dark_mode·note_position, save 스텁). 사용자 실창 + 설정 파일로 지속 확인(web_geometry/dark/font/last 모두 기록됨).
+
+**Phase 3→웹 이관 시 아직 못 옮긴 CTk 기능(=남은 후보):**
+- **업데이트 확인/자동 업데이트**(`update.py`+`updater_ui.py`): 상단 "업데이트 확인" 버튼이 웹에선 死버튼. GitHub 릴리스 체크·다운로드·설치.
+- **뷰어에서 수동 복사**: CTk는 본문 절 클릭/드래그 선택 시 출력형식대로 복사(`viewer_ops._copy_verses_formatted`). 웹 본문 패널은 미구현(검색결과·로그는 복사됨).
+- **스크롤 동기화**: CTk는 본문↔원어 패널 스크롤 동기(`_on_viewer_yscroll`). 웹 미구현.
+- **DB 새로고침**: CTk 설정탭 "새로고침"(`refresh_databases`로 bible_versions 재스캔). 웹 미구현.
+- **절 점프 입력**(CTk verse_jump) · 다크 토글 외 기타 소소한 것.
+
+**남은 Phase:** 5 패키징·서명(`--add-data web`, 폰트 포함; WebView2는 Win11 기본). + 위 이관 누락 기능들(우선순위는 사용자와 협의).
