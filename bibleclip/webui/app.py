@@ -33,6 +33,7 @@ def main():
         url=_index_path(),
         js_api=api,
         min_size=(900, 650),
+        text_select=True,  # allow selecting verse text (CSS limits it to panels)
         **kw,
     )
     api.set_window(window)  # lets the clipboard monitor push events back to JS

@@ -395,7 +395,7 @@
           .filter(Boolean)
           .join("");
         const cls = "v" + (multi ? " multi" : "") + (hl.has(n) ? " hl" : "");
-        return `<div class="${cls}"><span class="vnum">${n}</span>${lines}</div>`;
+        return `<div class="${cls}" data-v="${n}"><span class="vnum">${n}</span>${lines}</div>`;
       })
       .join("");
 
@@ -982,16 +982,70 @@
       );
     });
 
-    const step = (delta) => {
-      const i = state.chapters.indexOf(state.chapter);
-      const j = i + delta;
-      if (j >= 0 && j < state.chapters.length) {
-        state.chapter = state.chapters[j];
-        loadChapter();
-      }
-    };
-    $("prev-ch").addEventListener("click", () => step(-1));
-    $("next-ch").addEventListener("click", () => step(1));
+    $("prev-ch").addEventListener("click", () => chapStep(-1));
+    $("next-ch").addEventListener("click", () => chapStep(1));
+
+    // Manual copy from the scripture panel: click a verse (or drag-select a
+    // range) → copy in the viewer's versions, like the desktop app.
+    const scr = $("scripture");
+    scr.addEventListener("mouseup", () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount || !sel.toString().trim()) return;
+      const range = sel.getRangeAt(0);
+      const verses = [...scr.querySelectorAll(".v[data-v]")]
+        .filter((el) => range.intersectsNode(el))
+        .map((el) => +el.dataset.v);
+      if (verses.length) copyVerses(verses);
+    });
+    scr.addEventListener("click", (e) => {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return; // a range was handled on mouseup
+      const v = e.target.closest(".v[data-v]");
+      if (v) copyVerses([+v.dataset.v]);
+    });
+
+    // DB rescan (settings tab). Refreshes available versions everywhere.
+    if ($("db-refresh")) $("db-refresh").addEventListener("click", refreshDbs);
+
+    // Keyboard: ←/→ steps chapters when the viewer is active and not typing.
+    document.addEventListener("keydown", (e) => {
+      if (e.target.closest("input, textarea")) return;
+      if ($("viewer-view").hidden) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); chapStep(-1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); chapStep(1); }
+    });
+  }
+
+  function chapStep(delta) {
+    const i = state.chapters.indexOf(state.chapter);
+    const j = i + delta;
+    if (j >= 0 && j < state.chapters.length) {
+      state.chapter = state.chapters[j];
+      loadChapter();
+    }
+  }
+
+  function bookShort() {
+    const b = state.books.find((x) => x.num === state.book);
+    return b ? b.short : "?";
+  }
+
+  async function copyVerses(verses) {
+    if (!verses.length) return;
+    const r = await api().copy_reference(state.book, state.chapter, verses, state.viewer);
+    if (!r || !r.ok) return;
+    toast(`${bookShort()} ${state.chapter}:${verses.join(",")} 복사됨`);
+    verses.forEach((n) => {
+      const el = $("scripture").querySelector(`.v[data-v="${n}"]`);
+      if (el) { el.classList.add("copied"); setTimeout(() => el.classList.remove("copied"), 700); }
+    });
+  }
+
+  async function refreshDbs() {
+    const res = await api().refresh_databases();
+    state.versions = res.versions;
+    if (setState) { setState.versions = res.versions; renderOrder(); }
+    toast(res.added && res.added.length ? `${res.added.length}개 역본 추가됨` : "새 역본 없음");
   }
 
   if (hasBridge()) {

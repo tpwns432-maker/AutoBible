@@ -318,13 +318,15 @@ class Library:
             'n_parts': n_parts,
         }
 
-    def format_reference(self, book_num, chapter, verses):
-        """Format one reference across the configured ``output_order`` versions.
+    def format_reference(self, book_num, chapter, verses, order=None):
+        """Format one reference across a list of versions.
 
-        ``verses`` may be a list of verse numbers or empty/None for the whole
-        chapter. Returns ``(text, n_parts)`` — ``('', 0)`` when nothing matched
-        (no output_order, or no loaded version had the passage)."""
-        order = self.settings.get('output_order') or []
+        ``order`` defaults to the configured ``output_order`` (clipboard
+        output); callers may pass an explicit list (e.g. the viewer's versions
+        for manual copy). ``verses`` may be a list or empty/None for the whole
+        chapter. Returns ``(text, n_parts)`` — ``('', 0)`` when nothing matched."""
+        if order is None:
+            order = self.settings.get('output_order') or []
         if not order:
             return '', 0
         fmt = Formatter(self.settings, self.dbs)

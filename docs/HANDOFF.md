@@ -177,11 +177,11 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - **달 아이콘 패치**: 다크 모드일 때 달이 노란색(`#FFD66B`)으로 채워지고 라이트일 때 외곽선만 — 상태 직관화(`[data-theme="dark"] #theme-toggle svg path{fill}`).
 - **검증**: `tests/test_webui_api.py`(set_font_size 클램프·set_dark_mode·note_position, save 스텁). 사용자 실창 + 설정 파일로 지속 확인(web_geometry/dark/font/last 모두 기록됨).
 
-**Phase 3→웹 이관 시 아직 못 옮긴 CTk 기능(=남은 후보):**
-- **업데이트 확인/자동 업데이트**(`update.py`+`updater_ui.py`): 상단 "업데이트 확인" 버튼이 웹에선 死버튼. GitHub 릴리스 체크·다운로드·설치.
-- **뷰어에서 수동 복사**: CTk는 본문 절 클릭/드래그 선택 시 출력형식대로 복사(`viewer_ops._copy_verses_formatted`). 웹 본문 패널은 미구현(검색결과·로그는 복사됨).
-- **스크롤 동기화**: CTk는 본문↔원어 패널 스크롤 동기(`_on_viewer_yscroll`). 웹 미구현.
-- **DB 새로고침**: CTk 설정탭 "새로고침"(`refresh_databases`로 bible_versions 재스캔). 웹 미구현.
-- **절 점프 입력**(CTk verse_jump) · 다크 토글 외 기타 소소한 것.
+**Phase 3→웹 이관 누락 기능:**
+- ✅ **뷰어 수동 복사**(완료): 본문 절 클릭=단일 복사, 드래그 선택=범위 복사(`copy_reference(...,versions=state.viewer)`로 보고 있는 역본 형식). ⚠️ **pywebview는 `text_select` 기본 False** — `create_window(text_select=True)` 안 켜면 드래그 선택 자체가 안 됨(블럭도 안 보임). CSS로 읽기 패널만 `user-select:text`, 나머지 chrome은 `none`.
+- ✅ **키보드 장 이동**(완료): 본문 화면에서 ←/→ → 이전/다음 장(`chapStep`, 입력 포커스/비뷰어 시 무시).
+- ✅ **DB 새로고침**(완료): 출력설정 "출력 순서" 카드의 "DB 새로고침" → `api.refresh_databases()`(lib.refresh_databases + 버전목록 반환).
+- ⬜ **업데이트 확인/자동 업데이트**(`update.py`+`updater_ui.py`): 상단 "업데이트 확인" 버튼이 웹에선 死버튼. GitHub 릴리스 체크·다운로드·설치. **다음 작업.**
+- ⬜ **스크롤 동기화**: CTk 본문↔원어 패널 스크롤 동기(`_on_viewer_yscroll`). 웹 미구현(폴리시 후보).
 
 **남은 Phase:** 5 패키징·서명(`--add-data web`, 폰트 포함; WebView2는 Win11 기본). + 위 이관 누락 기능들(우선순위는 사용자와 협의).

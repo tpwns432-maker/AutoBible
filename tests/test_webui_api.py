@@ -197,7 +197,16 @@ def main():
     cp = api.copy_reference(sr['hits'][0]['book'], sr['hits'][0]['chapter'],
                             [sr['hits'][0]['verse']])
     assert cp['ok'] and '태초' in cp['text'], cp
+    # explicit versions override output_order (viewer manual copy)
+    cp2 = api.copy_reference(10, 1, [1], versions=[ver])
+    assert cp2['ok'] and '태초' in cp2['text'], cp2
     print(f"search('태초') -> {len(sr['hits'])} hits; copy_reference ok")
+
+    # refresh_databases returns the (unchanged here) version list
+    rd = api.refresh_databases()
+    assert isinstance(rd['added'], list) and rd['versions'], rd
+    assert len(rd['versions']) == len(init['versions'])
+    print(f"refresh_databases -> +{len(rd['added'])}, total {len(rd['versions'])}")
 
     # set_viewer_order trusts the given order (drag reorder)
     if len(all_names) >= 2:

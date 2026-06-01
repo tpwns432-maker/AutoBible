@@ -243,6 +243,12 @@ class Api:
         self.lib.save_settings()
         return size
 
+    def refresh_databases(self):
+        """Rescan the bible_versions folder for newly added DB files (no restart
+        needed). Returns {added:[names], versions:[...]} for the UI to refresh."""
+        added = self.lib.refresh_databases()
+        return {'added': added, 'versions': self.lib.versions()}
+
     def note_position(self, book, chapter):
         """Remember the last viewed book/chapter (saved to disk on window close
         or on the next settings write — cheap, no immediate disk I/O)."""
@@ -407,12 +413,15 @@ class Api:
         return {'keyword': keyword, 'version': ver,
                 'display': db.display_name, 'hits': hits}
 
-    def copy_reference(self, book, chapter, verses):
+    def copy_reference(self, book, chapter, verses, versions=None):
         """Format book/chapter/verses via the output pipeline, place it on the
         clipboard, and tell the monitor (so it isn't re-detected). ``verses`` is
-        a list (empty = whole chapter). Returns {ok, text} or {ok:False}."""
+        a list (empty = whole chapter). ``versions`` overrides output_order
+        (the viewer passes its displayed versions for manual copy). Returns
+        {ok, text} or {ok:False}."""
         vs = [int(v) for v in (verses or [])]
-        text, _ = self.lib.format_reference(int(book), int(chapter), vs)
+        order = [v for v in versions if v in self.lib.dbs] if versions else None
+        text, _ = self.lib.format_reference(int(book), int(chapter), vs, order)
         if not text:
             return {'ok': False}
         if pyperclip is not None:
