@@ -139,68 +139,32 @@ class ThemeMixin:
         # viewer_scroll is a CTkScrollbar (auto-skin)
 
         # --- Settings tab ---
+        # Cards, labels, buttons, segmented groups and checkboxes are CTk widgets
+        # that re-skin via the appearance mode. Only the PanedWindow, the tk.Frame
+        # holders inside the left card, the two tk.Listboxes and the preview
+        # tk.Text need manual coloring.
         self.settings_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
-        self.settings_left.configure(bg=t['frame_bg'])
-        self.settings_right.configure(bg=t['bg'])
-        self.settings_canvas.configure(bg=t['bg'])
-        self._style_scrollbar(self.settings_scrollbar)
-        self.settings_scroll_frame.configure(bg=t['bg'])
+        self.settings_right_holder.configure(bg=t['bg'])
 
-        # Left panel labels
-        for w in self.settings_left.winfo_children():
-            if isinstance(w, tk.Label):
-                w.configure(bg=t['frame_bg'], fg=t['fg'])
-            elif isinstance(w, tk.Frame):
-                w.configure(bg=t['frame_bg'])
-                for c in w.winfo_children():
-                    if isinstance(c, tk.Label):
-                        c.configure(bg=t['frame_bg'], fg=t['fg'])
-
-        # Dual listbox area
-        for w in self.settings_left.winfo_children():
-            if isinstance(w, tk.Frame):
-                w.configure(bg=t['frame_bg'])
-                for c in w.winfo_children():
-                    if isinstance(c, tk.Frame):
-                        c.configure(bg=t['frame_bg'])
-                        for gc in c.winfo_children():
-                            if isinstance(gc, tk.Label):
-                                gc.configure(bg=t['frame_bg'], fg=t['fg'])
+        def _blend_tk_frames(w):
+            for c in w.winfo_children():
+                if isinstance(c, tk.Frame) and not isinstance(c, ctk.CTkBaseClass):
+                    c.configure(bg=t['viewer_bg'])
+                    _blend_tk_frames(c)
+        _blend_tk_frames(self.settings_left)
 
         self._apply_listbox_theme()
-
-        # Buttons in settings
-        for btn in [self.add_btn, self.remove_btn, self.refresh_btn,
-                    self.up_btn, self.down_btn, self.clear_btn, self.preview_refresh_btn]:
-            self._style_button(btn)
-
-        # LabelFrames and their radio/check buttons
-        for lf in self._settings_labelframes:
-            lf.configure(bg=t['bg'], fg=t['fg'])
-            for child in lf.winfo_children():
-                if isinstance(child, (tk.Radiobutton, tk.Checkbutton)):
-                    child.configure(bg=t['bg'], fg=t['fg'],
-                                    selectcolor=t['radio_sel'],
-                                    activebackground=t['bg'],
-                                    activeforeground=t['fg'],
-                                    highlightthickness=0)
-
-        # Header labels in scroll frame
-        for lbl in self._settings_header_labels:
-            lbl.configure(bg=t['bg'], fg=t['fg'])
-
-        # Separator in scroll frame
-        for w in self.settings_scroll_frame.winfo_children():
-            if isinstance(w, tk.Frame) and w not in self._settings_labelframes:
-                # Could be separator or preview header
-                w.configure(bg=t['bg'])
-                for c in w.winfo_children():
-                    if isinstance(c, tk.Label):
-                        c.configure(bg=t['bg'], fg=t['fg'])
-
-        # Preview
         self.preview_text.configure(bg=t['preview_bg'], fg=t['preview_fg'],
-                                      insertbackground=t['fg'])
+                                    insertbackground=t['fg'])
+
+        # Re-skin segmented buttons (selected-segment white text is painted
+        # manually, so it must be re-applied after an appearance-mode switch).
+        for seg in getattr(self, '_settings_segs', []):
+            self._restyle_segmented(seg)
+        if hasattr(self, 'tab_bar'):
+            self._restyle_segmented(self.tab_bar)
+        if hasattr(self, 'lex_lang_seg'):
+            self._restyle_segmented(self.lex_lang_seg)
 
         # --- Lexicon panels inside viewer tab ---
         # dict language toggle is a CTkSegmentedButton (auto-skin)
@@ -237,12 +201,6 @@ class ThemeMixin:
                         selectforeground=t['listbox_sel_fg'],
                         highlightthickness=1, highlightcolor=t['accent'],
                         highlightbackground=t['border'])
-
-    def _style_button(self, btn):
-        t = self.theme
-        btn.configure(bg=t['button_bg'], fg=t['button_fg'],
-                     activebackground=t['button_active'], activeforeground=t['button_fg'],
-                     highlightthickness=0, bd=0)
 
     def _style_scrollbar(self, sb):
         """Visible scrollbar: a contrasting thumb so position is obvious."""
