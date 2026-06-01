@@ -1,6 +1,7 @@
 """Builds the scripture viewer tab (3-panel + log)."""
 import tkinter as tk
 from tkinter import ttk, messagebox
+import customtkinter as ctk
 import sqlite3
 import os
 import sys
@@ -55,7 +56,7 @@ from bibleclip.core.engine import Engine
 from bibleclip.data.bible_db import BibleDB
 
 
-from bibleclip.theme import LIGHT_THEME, DARK_THEME
+from bibleclip.theme import LIGHT_THEME, DARK_THEME, CTK
 
 
 from bibleclip.core.formatter import Formatter
@@ -173,44 +174,51 @@ class ViewerTabMixin:
         self.lex_lang_label.pack(side=tk.RIGHT, padx=(8, 4))
 
         # Main vertical PanedWindow: 3-panel area (top) + activity log (bottom)
-        vpw = tk.PanedWindow(self.tab_viewer, orient=tk.VERTICAL, sashwidth=4)
-        vpw.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        vpw = tk.PanedWindow(self.tab_viewer, orient=tk.VERTICAL, sashwidth=8,
+                             bd=0, relief=tk.FLAT)
+        vpw.pack(fill=tk.BOTH, expand=True, padx=10, pady=(2, 10))
         self.viewer_pane = vpw
 
-        # Top: horizontal PanedWindow with 3 panels
-        main_top = tk.Frame(vpw)
+        # Top: horizontal PanedWindow with 3 card panels
+        main_top = tk.Frame(vpw, bd=0, highlightthickness=0)
         vpw.add(main_top, minsize=240, stretch="always")
-        hpw = tk.PanedWindow(main_top, orient=tk.HORIZONTAL, sashwidth=4)
+        hpw = tk.PanedWindow(main_top, orient=tk.HORIZONTAL, sashwidth=10,
+                             bd=0, relief=tk.FLAT)
         hpw.pack(fill=tk.BOTH, expand=True)
         self.viewer_hpane = hpw
 
-        # Panel 1: regular Bible viewer (existing)
-        tf = tk.Frame(hpw)
-        hpw.add(tf, minsize=300, stretch="always")
-        self.viewer_text_frame = tf
-        self.viewer_text = tk.Text(tf, font=(BODY_FONT, 11), wrap=tk.WORD,
-                                     state=tk.DISABLED, spacing1=3, spacing3=4,
-                                     padx=18, pady=14)
-        self.viewer_scroll = tk.Scrollbar(tf, command=self.viewer_text.yview)
+        def _card(parent, title, minsize):
+            card = ctk.CTkFrame(parent, fg_color=CTK['card'], corner_radius=14,
+                                border_width=1, border_color=CTK['card_border'])
+            parent.add(card, minsize=minsize, stretch="always")
+            card.grid_columnconfigure(0, weight=1)
+            card.grid_rowconfigure(1, weight=1)
+            head = ctk.CTkLabel(card, text=title, font=(UI_FONT, 11, 'bold'),
+                                text_color=CTK['muted'], anchor='w')
+            head.grid(row=0, column=0, columnspan=2, sticky='ew', padx=16, pady=(11, 3))
+            return card, head
+
+        def _panel_text(card, **kw):
+            txt = tk.Text(card, wrap=tk.WORD, state=tk.DISABLED, relief=tk.FLAT,
+                          borderwidth=0, highlightthickness=0, **kw)
+            scr = ctk.CTkScrollbar(card, command=txt.yview)
+            txt.grid(row=1, column=0, sticky='nsew', padx=(12, 0), pady=(0, 12))
+            scr.grid(row=1, column=1, sticky='ns', padx=(2, 10), pady=(0, 12))
+            return txt, scr
+
+        # Panel 1: regular Bible viewer (card)
+        card1, self.viewer_panel_header = _card(hpw, "성경 본문", 300)
+        self.viewer_text_frame = card1
+        self.viewer_text, self.viewer_scroll = _panel_text(
+            card1, font=(BODY_FONT, 11), spacing1=3, spacing3=4, padx=16, pady=10)
         self.viewer_text.configure(yscrollcommand=self._on_viewer_yscroll)
-        self.viewer_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.viewer_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Panel 2: original-language Korean + Strong's code (clickable)
-        mid = tk.Frame(hpw)
-        hpw.add(mid, minsize=150, stretch="always")
-        self.lex_mid_frame = mid
-        self.lex_mid_label = tk.Label(mid, text="원어 (단어 클릭)", font=(UI_FONT, 9, 'bold'))
-        self.lex_mid_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
-        mf = tk.Frame(mid)
-        mf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.lex_mid_text = tk.Text(mf, font=(BODY_FONT, 10), wrap=tk.WORD,
-                                      state=tk.DISABLED, spacing1=3, spacing3=3,
-                                      padx=12, pady=10)
-        self.lex_mid_scroll = tk.Scrollbar(mf, command=self.lex_mid_text.yview)
+        card2, self.lex_mid_label = _card(hpw, "원어 (단어 클릭)", 150)
+        self.lex_mid_frame = card2
+        self.lex_mid_text, self.lex_mid_scroll = _panel_text(
+            card2, font=(BODY_FONT, 10), spacing1=3, spacing3=3, padx=12, pady=8)
         self.lex_mid_text.configure(yscrollcommand=self.lex_mid_scroll.set)
-        self.lex_mid_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.lex_mid_scroll.pack(side=tk.RIGHT, fill=tk.Y)
         self.lex_mid_text.tag_configure('lex_vnum', font=(BODY_FONT, 9, 'bold'))
         self.lex_mid_text.tag_configure('lex_word')
         self.lex_mid_text.tag_bind('lex_word', '<Enter>',
@@ -226,45 +234,35 @@ class ViewerTabMixin:
         self.lex_mid_text.bind('<Motion>', self._on_lex_hover)
         self.lex_mid_text.bind('<Leave>', self._on_lex_hover_leave)
 
-        # Panel 3: dictionary entry
-        rg = tk.Frame(hpw)
-        hpw.add(rg, minsize=150, stretch="always")
-        self.lex_right_frame = rg
-        self.lex_right_label = tk.Label(rg, text="사전", font=(UI_FONT, 9, 'bold'))
-        self.lex_right_label.pack(anchor=tk.W, padx=8, pady=(4, 0))
-        rgf = tk.Frame(rg)
-        rgf.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        self.lex_right_text = tk.Text(rgf, font=(BODY_FONT, 10), wrap=tk.WORD,
-                                        state=tk.DISABLED, spacing1=3, spacing3=3,
-                                        padx=12, pady=10)
-        self.lex_right_scroll = tk.Scrollbar(rgf, command=self.lex_right_text.yview)
+        # Panel 3: dictionary entry (card)
+        card3, self.lex_right_label = _card(hpw, "사전", 150)
+        self.lex_right_frame = card3
+        self.lex_right_text, self.lex_right_scroll = _panel_text(
+            card3, font=(BODY_FONT, 10), spacing1=3, spacing3=3, padx=12, pady=8)
         self.lex_right_text.configure(yscrollcommand=self.lex_right_scroll.set)
-        self.lex_right_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.lex_right_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         self._current_lex_code = None
 
-        # Bottom: activity log spanning the full width across the 3 panels
-        log_frame = tk.Frame(vpw)
-        vpw.add(log_frame, minsize=80, stretch="never")
-        self.log_frame = log_frame
-
-        log_header = tk.Frame(log_frame)
-        log_header.pack(fill=tk.X, padx=8, pady=(4, 2))
-        self.log_header = log_header
-        log_lbl = tk.Label(log_header, text="활동 로그  (구절 클릭 → 이동)",
-                           font=(UI_FONT, 9, 'bold'))
-        log_lbl.pack(side=tk.LEFT)
-        self._log_label = log_lbl
-
-        log_inner = tk.Frame(log_frame)
-        log_inner.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
-        self.log_text = tk.Text(log_inner, font=(MONO_FONT, 9), wrap=tk.WORD,
-                                  state=tk.DISABLED, height=4)
-        self.log_scroll = tk.Scrollbar(log_inner, command=self.log_text.yview)
+        # Bottom: activity log card spanning the full width
+        logcard = ctk.CTkFrame(vpw, fg_color=CTK['card'], corner_radius=14,
+                               border_width=1, border_color=CTK['card_border'])
+        vpw.add(logcard, minsize=92, stretch="never")
+        self.log_frame = logcard
+        logcard.grid_columnconfigure(0, weight=1)
+        logcard.grid_rowconfigure(1, weight=1)
+        self._log_label = ctk.CTkLabel(logcard, text="활동 로그  (구절 클릭 → 이동)",
+                                       font=(UI_FONT, 11, 'bold'),
+                                       text_color=CTK['muted'], anchor='w')
+        self._log_label.grid(row=0, column=0, columnspan=2, sticky='ew',
+                             padx=16, pady=(10, 3))
+        self.log_header = self._log_label
+        self.log_text = tk.Text(logcard, font=(MONO_FONT, 9), wrap=tk.WORD,
+                                state=tk.DISABLED, height=4, relief=tk.FLAT,
+                                borderwidth=0, highlightthickness=0)
+        self.log_scroll = ctk.CTkScrollbar(logcard, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=self.log_scroll.set)
-        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.log_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.log_text.grid(row=1, column=0, sticky='nsew', padx=(12, 0), pady=(0, 12))
+        self.log_scroll.grid(row=1, column=1, sticky='ns', padx=(2, 10), pady=(0, 12))
         self.log_text.tag_configure('logref', underline=True)
         self.log_text.tag_bind('logref', '<Enter>',
                                lambda e: self.log_text.configure(cursor='hand2'))

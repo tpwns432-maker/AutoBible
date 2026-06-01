@@ -109,21 +109,10 @@ class ThemeMixin:
 
         # --- Viewer tab ---
         self.viewer_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
-        self.log_frame.configure(bg=t['frame_bg'])
-        self._log_label.configure(bg=t['frame_bg'], fg=t['fg'])
-        if hasattr(self, 'log_header'):
-            self.log_header.configure(bg=t['frame_bg'])
-        # Log inner frame
-        for w in self.log_frame.winfo_children():
-            if isinstance(w, tk.Frame):
-                w.configure(bg=t['frame_bg'])
-                for c in w.winfo_children():
-                    if isinstance(c, tk.Label):
-                        c.configure(bg=t['frame_bg'], fg=t['fg'])
-        self.log_text.configure(bg=t['entry_bg'], fg=t['entry_fg'],
+        # log card + label are CTk (auto-skin); only the tk.Text needs colors
+        self.log_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
                                 insertbackground=t['fg'])
         self.log_text.tag_configure('logref', foreground=t['accent'])
-        self._style_scrollbar(self.log_scroll)
 
         self.viewer_outer.configure(bg=t['bg'])
         self.version_bar.configure(bg=t['bg'])
@@ -150,7 +139,7 @@ class ThemeMixin:
                           insertbackground=t['fg'],
                           highlightthickness=1, highlightcolor=t['accent'],
                           highlightbackground=t['border'])
-        self.viewer_text_frame.configure(bg=t['bg'])
+        # viewer_text_frame is a CTk card (auto-skin)
         sel_bg, sel_fg = t['select_bg'], t['select_fg']
         self.viewer_text.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
                                      insertbackground=t['fg'],
@@ -165,7 +154,7 @@ class ThemeMixin:
                                          selectbackground=sel_bg, selectforeground=sel_fg)
         self.viewer_text.tag_configure('search_head', foreground=t['fg'])
         self.viewer_text.tag_configure('search_ref', foreground=t['accent'])
-        self._style_scrollbar(self.viewer_scroll)
+        # viewer_scroll is a CTkScrollbar (auto-skin)
 
         # --- Settings tab ---
         self.settings_pane.configure(bg=t['bg'], sashrelief=tk.FLAT)
@@ -243,19 +232,11 @@ class ThemeMixin:
             self.viewer_hpane.configure(bg=t['bg'], sashrelief=tk.FLAT)
         if hasattr(self, 'lex_mid_text'):
             sel_bg, sel_fg = t['select_bg'], t['select_fg']
-            for frm, lbl, txt, scr in (
-                (self.lex_mid_frame, self.lex_mid_label, self.lex_mid_text, self.lex_mid_scroll),
-                (self.lex_right_frame, self.lex_right_label, self.lex_right_text, self.lex_right_scroll),
-            ):
-                frm.configure(bg=t['bg'])
-                for c in frm.winfo_children():
-                    if isinstance(c, tk.Frame):
-                        c.configure(bg=t['bg'])
-                lbl.configure(bg=t['bg'], fg=t['fg'])
+            # cards / headers / scrollbars are CTk (auto-skin); theme the tk.Text only
+            for txt in (self.lex_mid_text, self.lex_right_text):
                 txt.configure(bg=t['viewer_bg'], fg=t['viewer_fg'],
                               insertbackground=t['fg'],
                               selectbackground=sel_bg, selectforeground=sel_fg)
-                self._style_scrollbar(scr)
             self.lex_mid_text.tag_configure('lex_vnum', foreground=t['verse_num'])
             self.lex_mid_text.tag_configure('lex_word', foreground=t['accent'])
             hl = getattr(self, '_lex_hl_code', None)
