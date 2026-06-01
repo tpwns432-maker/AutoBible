@@ -13,6 +13,7 @@ Set-Location (Split-Path $PSScriptRoot -Parent)   # repo root
 
 python -m PyInstaller --onedir --windowed --noconfirm --clean `
   --collect-submodules bibleclip `
+  --hidden-import pyperclip `
   --add-data "web;web" `
   --icon=icon.ico --name BibleClipWeb `
   --distpath dist_web --workpath build_web `

@@ -64,12 +64,14 @@ jobs:
           python-version: '3.12'
 
       - name: Install deps
-        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter pywebview pythonnet
+        # requirements.txt carries the runtime deps (incl. pyperclip — the
+        # clipboard backend; without it monitoring + verse-copy silently fail).
+        run: python -m pip install --upgrade pip pyinstaller -r requirements.txt
 
       - name: Build BibleClipWeb.exe
         run: >
           python -m PyInstaller --onedir --windowed --noconfirm --clean
-          --collect-submodules bibleclip --add-data "web;web"
+          --collect-submodules bibleclip --hidden-import pyperclip --add-data "web;web"
           --icon=icon.ico --name BibleClipWeb bibleclip_web.py
 
       - name: Assemble package
