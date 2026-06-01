@@ -421,9 +421,23 @@
               : esc(w.w)
           )
           .join(" ");
-        return `<div class="v"><span class="vnum">${row.n}</span>${words}</div>`;
+        return `<div class="v" data-v="${row.n}"><span class="vnum">${row.n}</span>${words}</div>`;
       })
       .join("");
+  }
+
+  // One-way scroll sync: scripture → interlinear (align the same verse at top).
+  function syncInterlinToScripture() {
+    const host = $("scripture"), il = $("interlin");
+    if (!host || !il) return;
+    const top = host.getBoundingClientRect().top;
+    let v = null;
+    for (const el of host.querySelectorAll(".v[data-v]")) {
+      if (el.getBoundingClientRect().bottom > top + 1) { v = el.dataset.v; break; }
+    }
+    if (v == null) return;
+    const row = il.querySelector(`.v[data-v="${v}"]`);
+    if (row) il.scrollTop += row.getBoundingClientRect().top - il.getBoundingClientRect().top;
   }
 
   function resetLexicon() {
@@ -1034,6 +1048,13 @@
       if (sel && !sel.isCollapsed) return; // a range was handled on mouseup
       const v = e.target.closest(".v[data-v]");
       if (v) copyVerses([+v.dataset.v]);
+    });
+    // Scroll sync: scripture drives the interlinear panel (rAF-throttled).
+    let syncPending = false;
+    scr.addEventListener("scroll", () => {
+      if (syncPending) return;
+      syncPending = true;
+      requestAnimationFrame(() => { syncPending = false; syncInterlinToScripture(); });
     });
 
     // DB rescan (settings tab). Refreshes available versions everywhere.
