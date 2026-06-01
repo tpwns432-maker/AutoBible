@@ -342,16 +342,27 @@ class ViewerOpsMixin:
 
     # ---- Panel split (sash) persistence ----
 
-    def _restore_sash_positions(self):
+    def _restore_sash_positions(self, _tries=0):
         try:
             self.root.update_idletasks()
             hsash = self.settings.get('viewer_hsash') or []
+            vsash = self.settings.get('viewer_vsash')
+            # CTk cards realize their size late; if we place the sashes before the
+            # panes are big enough, tk clamps them and the layout looks "reset".
+            # Retry until the panes can actually honor the saved positions.
+            need_w = (max(hsash) + 40) if hsash else 0
+            need_h = (int(vsash) + 40) if vsash else 0
+            pane_w = self.viewer_hpane.winfo_width()
+            pane_h = self.viewer_pane.winfo_height()
+            if _tries < 25 and ((need_w and pane_w < need_w)
+                                or (need_h and pane_h < need_h)):
+                self.root.after(60, lambda: self._restore_sash_positions(_tries + 1))
+                return
             for i, x in enumerate(hsash):
                 try:
                     self.viewer_hpane.sash_place(i, int(x), 1)
                 except Exception:
                     pass
-            vsash = self.settings.get('viewer_vsash')
             if vsash is not None:
                 try:
                     self.viewer_pane.sash_place(0, 1, int(vsash))

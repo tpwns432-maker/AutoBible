@@ -340,6 +340,19 @@ class LexiconMixin:
             except ValueError:
                 pass
             top.destroy()
+            # Closing a child Toplevel activates the main window on Windows,
+            # which then hides the other popups behind it. Re-raise the
+            # remaining popups so they stay in front.
+            for p in self._lex_popups:
+                try:
+                    p.lift()
+                except Exception:
+                    pass
+            if self._lex_popups:
+                try:
+                    self._lex_popups[-1].focus_set()
+                except Exception:
+                    pass
 
         top.protocol("WM_DELETE_WINDOW", on_close)
         top.bind('<Escape>', lambda e: on_close())
