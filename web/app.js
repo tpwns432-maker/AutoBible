@@ -73,6 +73,48 @@
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
 
+  // ---- Activity log drawer + toast (UI only; work without the bridge) ----
+
+  const drawer = $("log-drawer");
+  function openDrawer() {
+    if (!drawer) return;
+    drawer.hidden = false;
+    $("log-toggle").classList.add("on");
+    const dot = $("log-dot");
+    if (dot) dot.hidden = true;
+  }
+  function closeDrawer() {
+    if (!drawer) return;
+    drawer.hidden = true;
+    $("log-toggle").classList.remove("on");
+  }
+  if ($("log-toggle")) {
+    $("log-toggle").addEventListener("click", () =>
+      drawer.hidden ? openDrawer() : closeDrawer()
+    );
+  }
+  if ($("log-close")) $("log-close").addEventListener("click", closeDrawer);
+
+  function flagUnread() {
+    if (drawer && drawer.hidden) {
+      const dot = $("log-dot");
+      if (dot) dot.hidden = false;
+    }
+  }
+
+  function toast(msg) {
+    const wrap = $("toast-wrap");
+    if (!wrap) return;
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(() => {
+      el.classList.add("fade");
+      setTimeout(() => el.remove(), 320);
+    }, 2400);
+  }
+
   // ---- Live mode ----
 
   function hasBridge() {
@@ -80,7 +122,7 @@
   }
 
   const api = () => window.pywebview.api;
-  const state = { version: null, book: null, chapter: null, versions: [], books: [], chapters: [] };
+  const state = { version: null, book: null, chapter: null, versions: [], books: [], chapters: [], monitoring: false };
 
   async function boot() {
     const init = await api().get_initial();
@@ -96,6 +138,7 @@
     }
     await loadChapter();
     wireControls();
+    wireMonitor();
   }
 
   function bookName(num) {
@@ -108,7 +151,7 @@
     if (c) c.textContent = state.version;
   }
 
-  async function loadChapter() {
+  async function loadChapter(highlight) {
     $("book-pill").textContent = bookName(state.book);
     $("chapter-pill").textContent = state.chapter + "장";
     $("scripture-head").textContent =
@@ -121,18 +164,26 @@
       api().get_chapter(state.version, state.book, state.chapter),
       api().get_interlinear(state.book, state.chapter),
     ]);
-    renderScripture(chap.verses);
+    renderScripture(chap.verses, highlight);
     renderInterlinear(inter);
   }
 
-  function renderScripture(verses) {
+  function renderScripture(verses, highlight) {
     if (!verses || !verses.length) {
       $("scripture").innerHTML = `<div class="panel-loading">본문 없음</div>`;
       return;
     }
+    const hl = new Set(highlight || []);
     $("scripture").innerHTML = verses
-      .map((v) => `<div class="v"><span class="vnum">${v.n}</span>${esc(v.text)}</div>`)
+      .map(
+        (v) =>
+          `<div class="v${hl.has(v.n) ? " hl" : ""}"><span class="vnum">${v.n}</span>${esc(v.text)}</div>`
+      )
       .join("");
+    if (hl.size) {
+      const first = $("scripture").querySelector(".v.hl");
+      if (first) first.scrollIntoView({ block: "center" });
+    }
   }
 
   function renderInterlinear(data) {
@@ -169,6 +220,103 @@
     }
     $("lexicon").innerHTML =
       `<span class="chip">${esc(res.code)}</span><div class="lex-body">${res.html}</div>`;
+  }
+
+  // ---- Clipboard monitoring ----
+
+  function setStatus(active) {
+    const badge = $("status-badge");
+    const btn = $("monitor-btn");
+    if (badge) {
+      badge.textContent = active ? "모니터링 중" : "대기 중";
+      badge.classList.toggle("on", active);
+    }
+    if (btn) btn.textContent = active ? "모니터링 중지" : "모니터링 시작";
+  }
+
+  // Navigate the viewer to a caught reference and highlight its verses.
+  async function goToRef(book, chapter, verses) {
+    state.book = book;
+    state.chapters = await api().get_chapters(state.version, book);
+    // Fall back to the first available chapter if this version lacks it.
+    state.chapter = state.chapters.includes(chapter) ? chapter : state.chapters[0] || chapter;
+    await loadChapter(verses && verses.length ? verses : null);
+  }
+
+  const refLog = [];  // caught references, newest last (index === log row order)
+
+  function vlist(verses) {
+    if (!verses || !verses.length) return "전체";
+    return verses.join(", ");
+  }
+
+  function renderLog() {
+    const list = $("log-list");
+    if (!list) return;
+    if (!refLog.length) {
+      list.innerHTML = `<div class="log-empty">모니터링 중 인식한 구절이 여기에 쌓입니다.</div>`;
+      return;
+    }
+    // Newest first.
+    list.innerHTML = refLog
+      .map((e, i) => {
+        if (e.kind === "keyword") {
+          return `<div class="log-row keyword"><div class="log-ref"># ${esc(e.keyword)}</div><div class="log-meta">키워드 검색</div></div>`;
+        }
+        return `<div class="log-row" data-log="${i}"><div class="log-ref">${esc(e.short_name)} ${e.chapter}:${esc(vlist(e.verses))}</div><div class="log-meta"><span class="log-count">${e.n_parts}개 역본</span></div></div>`;
+      })
+      .reverse()
+      .join("");
+    list.querySelectorAll("[data-log]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const e = refLog[Number(row.dataset.log)];
+        if (e) goToRef(e.book_num, e.chapter, e.verses);
+      });
+    });
+  }
+
+  function wireMonitor() {
+    const btn = $("monitor-btn");
+    if (!btn) return;
+    let busy = false;
+    btn.addEventListener("click", async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        if (!state.monitoring) {
+          const res = await api().start_monitoring();
+          if (res && res.ok) {
+            state.monitoring = true;
+            setStatus(true);
+          } else {
+            toast("클립보드 모니터링을 시작할 수 없습니다");
+          }
+        } else {
+          await api().stop_monitoring();
+          state.monitoring = false;
+          setStatus(false);
+        }
+      } finally {
+        busy = false;
+      }
+    });
+
+    // Python → JS event channel (clipboard monitor runs on a worker thread).
+    window.bibleclip = {
+      onReference(r) {
+        refLog.push({ kind: "reference", ...r });
+        renderLog();
+        flagUnread();
+        toast(`${r.short_name} ${r.chapter}:${vlist(r.verses)} 변환·복사됨`);
+        goToRef(r.book_num, r.chapter, r.verses);
+      },
+      onKeyword(keyword) {
+        refLog.push({ kind: "keyword", keyword });
+        renderLog();
+        flagUnread();
+        toast(`키워드 "${keyword}" — 검색 기능 준비 중`);
+      },
+    };
   }
 
   function wireControls() {

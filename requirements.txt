@@ -5,3 +5,6 @@ certifi
 # Web UI (High redesign). On Windows pulls pythonnet for the EdgeChromium
 # (WebView2) backend; the WebView2 runtime ships with Windows 11.
 pywebview>=5.0
+# Cross-platform clipboard backend for the web UI's monitoring loop
+# (the CustomTkinter app uses tkinter/pbcopy directly instead).
+pyperclip>=1.8

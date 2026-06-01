@@ -7,11 +7,76 @@ calls save_settings. Exits via os._exit(0).
 """
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import bibleclip.webui.api as apimod
 from bibleclip.core.library import Library
 from bibleclip.webui.api import Api, markup_to_html
+
+
+class FakeClipboard:
+    """In-memory stand-in for pyperclip (no real system clipboard touched)."""
+    def __init__(self):
+        self.text = ''
+
+    def paste(self):
+        return self.text
+
+    def copy(self, text):
+        self.text = text
+
+
+class FakeWindow:
+    """Captures the JS pushed via window.evaluate_js (the Python→JS channel)."""
+    def __init__(self):
+        self.calls = []
+
+    def evaluate_js(self, js):
+        self.calls.append(js)
+
+
+def wait_for(predicate, timeout=3.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.05)
+    return predicate()
+
+
+def monitor_check():
+    """Drive the clipboard monitor end-to-end against fakes: a reference is
+    converted in place and pushed to JS as onReference; a '#keyword' as
+    onKeyword. Never touches the real clipboard or imports webview."""
+    fake = FakeClipboard()
+    apimod.pyperclip = fake          # swap the module's clipboard backend
+    win = FakeWindow()
+    api = Api(Library())
+    api.set_window(win)
+
+    res = api.start_monitoring()
+    assert res.get('ok'), res
+
+    # A reference: should be converted in place and pushed as onReference.
+    fake.text = '창 1:1'
+    assert wait_for(lambda: any('onReference' in c for c in win.calls)), \
+        "onReference was never pushed"
+    assert '태초' in fake.text, f"clipboard not converted in place: {fake.text!r}"
+    print(f"monitor: '창 1:1' -> onReference; clipboard now: {fake.text[:24]}…")
+
+    # A '#keyword' query: should be pushed as onKeyword.
+    n_ref = sum('onReference' in c for c in win.calls)
+    fake.text = '#사랑'
+    assert wait_for(lambda: any('onKeyword' in c for c in win.calls)), \
+        "onKeyword was never pushed"
+    assert sum('onReference' in c for c in win.calls) == n_ref, \
+        "keyword wrongly produced a reference"
+    print("monitor: '#사랑' -> onKeyword")
+
+    api.stop_monitoring()
+    assert api.monitoring is False
 
 
 def main():
@@ -58,6 +123,8 @@ def main():
         print(f"lookup_strong('H3068') -> {len(strong['html'])} chars html")
     else:
         print("(no lexicon data — skipped lookup_strong)")
+
+    monitor_check()
 
     print("\nALL WEBUI API CHECKS PASSED ✅")
 

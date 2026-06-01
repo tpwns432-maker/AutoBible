@@ -24,9 +24,10 @@
       <!-- search -->
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
     </div>
-    <div class="nav-icon" title="클립보드 로그" aria-label="클립보드 로그">
+    <div class="nav-icon" id="log-toggle" title="클립보드 로그" aria-label="클립보드 로그">
       <!-- clipboard -->
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+      <span class="nav-dot" id="log-dot" hidden></span>
     </div>
     <div class="nav-icon" title="역본 순서" aria-label="역본 순서">
       <!-- list -->
@@ -51,7 +52,7 @@
       <span class="brand">BibleClip</span>
       <span class="ver">v1.5.3</span>
       <span class="spacer"></span>
-      <button class="btn primary">모니터링 시작</button>
+      <button class="btn primary" id="monitor-btn">모니터링 시작</button>
       <span class="badge" id="status-badge">대기 중</span>
       <button class="btn">업데이트 확인</button>
     </header>
@@ -121,7 +122,24 @@
 
     </div>
   </div>
+
+  <!-- Activity log drawer (slides in from the right; toggled by the rail
+       clipboard icon). Lists clipboard references caught while monitoring;
+       each row re-navigates the viewer when clicked. -->
+  <aside class="drawer" id="log-drawer" hidden>
+    <div class="drawer-head">
+      <span>클립보드 로그</span>
+      <span class="drawer-close" id="log-close" title="닫기">✕</span>
+    </div>
+    <div class="drawer-body" id="log-list">
+      <div class="log-empty">모니터링 중 인식한 구절이 여기에 쌓입니다.</div>
+    </div>
+  </aside>
+
 </div>
+
+<!-- Transient confirmation when a reference is converted on the clipboard. -->
+<div class="toast-wrap" id="toast-wrap"></div>
 
 <script src="app.js"></script>
 </body>

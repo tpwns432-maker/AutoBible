@@ -3,8 +3,16 @@
 Each public method is callable from JavaScript as ``pywebview.api.<method>(...)``
 and must return JSON-serializable values. This module deliberately does NOT
 import `webview`, so it can be unit-tested headlessly against a plain Library.
+Events that originate in Python (caught clipboard references) are pushed to the
+front-end via the injected window's ``evaluate_js`` — still no `webview` import.
 """
+import json
 import re
+
+try:
+    import pyperclip
+except Exception:  # pragma: no cover - clipboard backend optional at import
+    pyperclip = None
 
 
 # Dictionary entries are stored as a small pseudo-HTML markup (the same dialect
@@ -27,6 +35,68 @@ class Api:
 
     def __init__(self, library):
         self.lib = library
+        self._window = None      # pywebview window, injected by webui.app.main()
+        self.monitoring = False
+
+    def set_window(self, window):
+        """Receive the pywebview window so Python-side events can reach JS.
+
+        Kept separate from __init__ so headless tests construct an Api with no
+        window (pushes become no-ops)."""
+        self._window = window
+
+    def _push(self, fn, *args):
+        """Invoke ``window.bibleclip.<fn>(...args)`` in the web view.
+
+        Safe to call from the monitor worker thread (pywebview marshals
+        evaluate_js to the UI thread) and a no-op when no window is attached."""
+        if self._window is None:
+            return
+        payload = ", ".join(json.dumps(a, ensure_ascii=False) for a in args)
+        js = f"window.bibleclip && window.bibleclip.{fn}({payload})"
+        try:
+            self._window.evaluate_js(js)
+        except Exception:
+            pass
+
+    # ---- Clipboard monitoring ----
+
+    def start_monitoring(self):
+        """Begin watching the system clipboard. Caught references are converted
+        in place (the formatted multi-version text replaces the clipboard) and
+        pushed to JS via window.bibleclip.onReference; '#keyword' queries go to
+        onKeyword."""
+        if pyperclip is None:
+            return {'ok': False, 'error': 'pyperclip unavailable'}
+        self.lib.start_monitoring(
+            self._clip_read, self._clip_write,
+            self._on_reference, self._on_keyword)
+        self.monitoring = True
+        return {'ok': True}
+
+    def stop_monitoring(self):
+        self.lib.stop_monitoring()
+        self.monitoring = False
+        return {'ok': True}
+
+    def _clip_read(self):
+        try:
+            return pyperclip.paste() or ''
+        except Exception:
+            return ''
+
+    def _clip_write(self, text):
+        try:
+            pyperclip.copy(text)
+        except Exception:
+            pass
+
+    def _on_reference(self, result):
+        # result is already JSON-serializable (see Library.build_output).
+        self._push('onReference', result)
+
+    def _on_keyword(self, keyword):
+        self._push('onKeyword', keyword)
 
     # ---- Bootstrap ----
 

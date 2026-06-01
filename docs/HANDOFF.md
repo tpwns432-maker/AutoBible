@@ -136,4 +136,13 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - **검증**: `tests/test_webui_api.py`(헤드리스 — get_initial/get_chapter('태초')/get_interlinear/lookup_strong('여호와'), webview 불필요). + 실제 `bibleclip_web.py` 창에서 책/장/버전 전환·원어·사전 클릭 동작 확인(사용자 OK). CTk 회귀 없음.
 - 알려진 정교화 후보: 라이브 사전의 히브리어 헤드워드를 48px로 크게 뽑는 건 미적용(정적 디자인엔 있음). 사전 마크업 파서 강건화.
 
-**남은 Phase:** 3 클립보드 모니터링(웹 백엔드 결정: pyperclip/win32 vs JS) + 다역본 병렬 + 출력설정 탭 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 3a — 클립보드 모니터링 (✅ 완료, 사용자 실창 검증):**
+- **백엔드 결정: `pyperclip`**(크로스플랫폼, requirements.txt 추가). CTk 앱은 tkinter/pbcopy 직접 사용 — 웹만 pyperclip.
+- `webui/api.py`: `start_monitoring()`/`stop_monitoring()` 추가. `Library.start_monitoring`에 `pyperclip.paste/copy`를 read/write로 주입. **Python→JS 푸시 채널**: `set_window(window)`로 주입받은 pywebview 창의 `evaluate_js`로 `window.bibleclip.onReference(result)` / `onKeyword(kw)` 호출 — **여전히 `webview` import 안 함**(window 객체만 보유, 헤드리스 시 None→no-op). 모니터 워커 스레드에서 호출해도 pywebview가 UI 스레드로 마샬, `onReference`는 비동기 작업을 await 없이 킥오프해 즉시 반환→evaluate_js 블로킹 짧음(데드락 없음).
+- `webui/app.py`: `create_window` 반환 창을 `api.set_window(window)`로 연결.
+- `web/`: 모니터 버튼(`#monitor-btn`) 토글+배지 상태, **캡처 시 뷰어 자동이동+절 하이라이트**(`.v.hl` flash), **토스트**(하단 `#toast-wrap`), **활동 로그 드로어**(우측 슬라이드, 레일 클립보드 아이콘 토글, unread 점, 로그행 클릭→재이동). 키워드(`#…`)는 토스트+로그만(검색 패널 미구현).
+  - ⚠️ 교훈: `.drawer{display:flex}`가 UA `[hidden]`을 이겨 드로어가 안 숨겨짐 → `.drawer[hidden]{display:none}` 명시 필요(고침). 같은 패턴 주의.
+- **검증**: `tests/test_webui_api.py` 확장(`FakeClipboard`+`FakeWindow`로 `start_monitoring`→`창 1:1` 인플레이스 변환·`onReference` 푸시·`#사랑`→`onKeyword` 검증, 실 클립보드/webview 불필요). + 사용자 실창 검증(모니터 토글·`요 1:1-3` 변환·자동이동·드로어 OK).
+- **다음 후보(사용자 합의로 보류)**: 로그행 클릭 시 **재복사**(현재 이동만 — CTk도 이동만이라 동작 일치).
+
+**남은 Phase:** 3b 다역본 병렬 + 출력설정 탭 + (검색 패널) + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
