@@ -64,13 +64,13 @@
       </div>
       <!-- Only the versions currently in use show as chips; the rest live
            behind the "+" (역본 추가·관리). Keeps the row uncluttered. -->
-      <span class="pill sel">KRV</span>
-      <span class="pill add" title="역본 추가·관리">＋</span>
+      <span class="pill sel" id="ver-chip">KRV</span>
+      <span class="pill add" id="ver-add" title="역본 추가·관리">＋</span>
       <span class="vsep"></span>
-      <span class="pill dropdown">여호수아</span>
-      <span class="pill dropdown">1장</span>
-      <span class="mini" title="이전 장">‹</span>
-      <span class="mini" title="다음 장">›</span>
+      <span class="pill dropdown" id="book-pill">여호수아</span>
+      <span class="pill dropdown" id="chapter-pill">1장</span>
+      <span class="mini" id="prev-ch" title="이전 장">‹</span>
+      <span class="mini" id="next-ch" title="다음 장">›</span>
       <span class="spacer"></span>
       <div class="seg" data-seg="lang">
         <div class="opt on">한글</div>
@@ -85,8 +85,8 @@
 
       <!-- Scripture -->
       <section class="card">
-        <div class="card-head">성경 본문 · 여호수아 1</div>
-        <div class="card-body scripture">
+        <div class="card-head" id="scripture-head">성경 본문 · 여호수아 1</div>
+        <div class="card-body scripture" id="scripture">
           <div class="v"><span class="vnum">1</span>여호와의 종 모세가 죽은 후에 여호와께서 모세의 시종 눈의 아들 여호수아에게 일러 가라사대</div>
           <div class="v"><span class="vnum">2</span>내 종 모세가 죽었으니 이제 너는 이 모든 백성으로 더불어 일어나 이 요단을 건너 내가 그들 곧 이스라엘 자손에게 주는 땅으로 가라</div>
           <div class="v"><span class="vnum">3</span>내가 모세에게 말한 바와 같이 무릇 너희 발바닥으로 밟는 곳을 내가 다 너희에게 주었노니</div>
@@ -97,7 +97,7 @@
       <!-- Interlinear / original language -->
       <section class="card">
         <div class="card-head">원어 · 단어 클릭</div>
-        <div class="card-body interlin">
+        <div class="card-body interlin" id="interlin">
           <div class="v"><span class="vnum">1</span>여호와의<span class="strong">H3068</span> 종<span class="strong">H5650</span> 모세가<span class="strong">H4872</span> 죽은<span class="strong">H4194</span> 후<span class="strong">H310</span> 여호와께서<span class="strong">H3068</span> 눈<span class="strong">H5126</span>의 아들<span class="strong">H1121</span> 여호수아<span class="strong">H3091</span>에게 일러<span class="strong">H559</span></div>
           <div class="v"><span class="vnum">2</span>내 종<span class="strong">H5650</span> 모세<span class="strong">H4872</span> 죽었으니<span class="strong">H4191</span> 이제<span class="strong">H6258</span> 일어나<span class="strong">H6965</span> 요단<span class="strong">H3383</span>을 건너<span class="strong">H5674</span></div>
         </div>
@@ -106,7 +106,7 @@
       <!-- Lexicon -->
       <section class="card">
         <div class="card-head">사전</div>
-        <div class="card-body lex">
+        <div class="card-body lex" id="lexicon">
           <span class="chip">H3068</span>
           <div class="lex-head">
             <span class="heb">יהוה</span>

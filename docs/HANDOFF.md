@@ -126,4 +126,14 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - `index.html` — 앱 레이아웃 + 하드코딩 샘플(여호수아 1). `app.js`는 미리보기 인터랙션만(테마/세그먼트/배지), **데이터 배선 없음**.
 - 사용자 결정 사항(반영됨): 본문 **산세리프**(세리프 X) · 본문에 **원어코드(H####) 숨김**(원어 패널엔 유지) · 역본 칩은 **사용 중인 것만** + 점선 "＋" 추가버튼 · 사전 히브리어 헤드워드 **48px**.
 
-**남은 Phase (다음 세션):** 2 pywebview 브리지+실제 장 렌더(웹 클립보드 백엔드 결정 지점 — `Library` API를 JS에 노출) · 3 3패널 실데이터+사전 마크업→HTML 변환기 · 4 폴리싱·상태 · 5 패키징·서명(폰트 자산 PyInstaller 포함). (WebView2는 Win11 기본 탑재.)
+**Phase 2 — pywebview 브리지 + 실데이터 렌더 (✅ 완료, 본문+원어+사전):**
+- 새 의존성 `pywebview`(requirements.txt). Windows=EdgeChromium(WebView2)+pythonnet 자동.
+- 신규 `bibleclip/webui/` (정적 `web/`와 구분되는 파이썬 브리지):
+  - `api.py` `class Api` — JS-facing(`pywebview.api.*`), **`webview` import 안 함**(헤드리스 테스트 가능). `Library`를 감싸 JSON 반환: `get_initial / get_books / get_chapters / get_chapter / get_interlinear / lookup_strong`. `markup_to_html()`로 사전 원시 마크업→HTML(`^`→공백, `<num>`→`span.lex-num`; `<b>/<br>/<sup>/<font>`는 보존).
+  - `app.py` `main()` — `Library`+`Api`로 `webview.create_window(url=get_resource_dir()/web/index.html, js_api=...)`+`start()`. 진입점: `bibleclip_web.py`, `python -m bibleclip.webui`.
+- `Library` 추가(읽기 접근자): `versions()`/`books(version)`/`primary_version()`.
+- `web/app.js`: **라이브 모드**(`window.pywebview` 있으면 실데이터, 없으면 정적 샘플 폴백). `pywebviewready`→`get_initial`→책/장/버전 드롭다운·본문·원어 렌더. 스트롱 칩 클릭→`lookup_strong`→사전. ‹›/책/장/버전 전환. `index.html`에 id 부여, `styles.css`에 `.menu`/`.lex-num`/`.panel-loading` 추가.
+- **검증**: `tests/test_webui_api.py`(헤드리스 — get_initial/get_chapter('태초')/get_interlinear/lookup_strong('여호와'), webview 불필요). + 실제 `bibleclip_web.py` 창에서 책/장/버전 전환·원어·사전 클릭 동작 확인(사용자 OK). CTk 회귀 없음.
+- 알려진 정교화 후보: 라이브 사전의 히브리어 헤드워드를 48px로 크게 뽑는 건 미적용(정적 디자인엔 있음). 사전 마크업 파서 강건화.
+
+**남은 Phase:** 3 클립보드 모니터링(웹 백엔드 결정: pyperclip/win32 vs JS) + 다역본 병렬 + 출력설정 탭 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)

@@ -206,6 +206,26 @@ class Library:
 
     # ---- Read API (UI-agnostic) ----
 
+    def versions(self):
+        """[{'name', 'display'}] for every loaded version, in load order."""
+        return [{'name': name, 'display': db.display_name}
+                for name, db in self.dbs.items()]
+
+    def books(self, version):
+        """[{'num', 'short', 'long'}] for one version (canonical book order)."""
+        db = self.dbs.get(version)
+        if not db:
+            return []
+        return [{'num': bn, 'short': short, 'long': long_}
+                for bn, short, long_ in db.book_list]
+
+    def primary_version(self):
+        """Best default version: first checked viewer version, else first DB."""
+        for n in self.settings.get('viewer_versions', []):
+            if n in self.dbs:
+                return n
+        return next(iter(self.dbs), None)
+
     def parse_reference(self, text):
         return Engine.parse_reference(text)
 
