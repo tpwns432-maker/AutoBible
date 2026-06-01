@@ -68,9 +68,17 @@ class ViewerOpsMixin:
             w.destroy()
         self.viewer_chip_widgets = {}
         self.viewer_chip_labels = {}
+        # reset chip-animation state (the widgets were just recreated)
+        if getattr(self, '_chip_anim_job', None):
+            try:
+                self.root.after_cancel(self._chip_anim_job)
+            except Exception:
+                pass
+        self._chip_anim_job = None
+        self._chip_cur_x = {}
         for name in self._viewer_order:
             self._build_chip(name)
-        self._layout_chips()
+        self._layout_chips(animate=False)
         self._highlight_focused_chip()
         self._apply_viewer_chip_theme()
 
@@ -145,10 +153,15 @@ class ViewerOpsMixin:
 
     # ---- Chip layout + live drag-reorder ----
 
-    def _layout_chips(self, drag_name=None, drag_x=None):
-        """Place every chip by absolute x. During a drag the dragged chip
-        follows the cursor (drag_x, in chip_frame coords) while the others slide
-        to open a gap at the drop slot — so the new order is visible live."""
+    def _layout_chips(self, drag_name=None, drag_x=None, animate=True):
+        """Compute each chip's target x and (optionally) ease them there.
+
+        "Gravity pulls left": every chip wants to sit packed at the left. The
+        dragged chip is exempt — it follows the cursor (drag_x) — and the rest
+        smoothly slide to open a gap at the insertion slot. The insertion index
+        is decided by the dragged chip's CENTER vs the others' fixed resting
+        centers, so it's symmetric regardless of drag direction (no hysteresis).
+        """
         order = [n for n in self._viewer_order if n in self.viewer_chip_widgets]
         if not order:
             self.chip_frame.configure(height=1)
@@ -163,49 +176,90 @@ class ViewerOpsMixin:
         except tk.TclError:
             pass
 
+        targets = {}
         if drag_name is None or drag_name not in order:
             x = pad
             for n in order:
-                self.viewer_chip_widgets[n].place(x=x, y=3)
+                targets[n] = x
                 x += wd[n] + gap
             self._drag_target_order = order
-            return
+        else:
+            others = [n for n in order if n != drag_name]
+            dw = wd[drag_name]
+            drag_center = drag_x + dw / 2
+            # fixed resting centers of the others (NO gap) — stable reference,
+            # so the threshold is the same whether moving left or right.
+            cum, centers = pad, []
+            for n in others:
+                centers.append(cum + wd[n] / 2)
+                cum += wd[n] + gap
+            insert_idx = sum(1 for c in centers if drag_center > c)
+            x = pad
+            for i, n in enumerate(others):
+                if i == insert_idx:
+                    x += dw + gap          # leave room for the dragged chip
+                targets[n] = x
+                x += wd[n] + gap
+            # dragged chip tracks the cursor immediately (no easing), clamped
+            fw = max(self.chip_frame.winfo_width(), int(cum + dw + gap))
+            clamped = max(pad, min(int(drag_x), fw - dw - pad))
+            self._chip_cur_x[drag_name] = clamped
+            w = self.viewer_chip_widgets[drag_name]
+            w.place(x=clamped, y=3)
+            w.lift()
+            self._drag_target_order = (others[:insert_idx] + [drag_name]
+                                       + others[insert_idx:])
 
-        others = [n for n in order if n != drag_name]
-        dw = wd[drag_name]
-        drag_center = drag_x + dw / 2
-        # midpoints of the flowing chips decide where the dragged one inserts
-        cum, centers = pad, []
-        for n in others:
-            centers.append(cum + wd[n] / 2)
-            cum += wd[n] + gap
-        insert_idx = 0
-        for i, c in enumerate(centers):
-            if drag_center > c:
-                insert_idx = i + 1
-        # lay out the others, opening a (dw+gap) gap at insert_idx
-        x = pad
-        for i, n in enumerate(others):
-            if i == insert_idx:
-                x += dw + gap
-            self.viewer_chip_widgets[n].place(x=x, y=3)
-            x += wd[n] + gap
-        # the dragged chip follows the cursor, clamped inside the frame
-        fw = max(self.chip_frame.winfo_width(), int(cum + dw + gap))
-        clamped = max(pad, min(int(drag_x), fw - dw - pad))
-        self.viewer_chip_widgets[drag_name].place(x=clamped, y=3)
-        self.viewer_chip_widgets[drag_name].lift()
-        self._drag_target_order = others[:insert_idx] + [drag_name] + others[insert_idx:]
+        self._chip_targets = targets
+        self._chip_drag_name = drag_name
+        if animate:
+            self._start_chip_anim()
+        else:
+            for n, tx in targets.items():
+                self._chip_cur_x[n] = tx
+                self.viewer_chip_widgets[n].place(x=tx, y=3)
+
+    def _start_chip_anim(self):
+        if getattr(self, '_chip_anim_job', None):
+            return                      # a tween loop is already running
+        self._chip_anim_step()
+
+    def _chip_anim_step(self):
+        """Ease each non-dragged chip toward its target x (gravity → left)."""
+        self._chip_anim_job = None
+        targets = getattr(self, '_chip_targets', {})
+        drag = getattr(self, '_chip_drag_name', None)
+        moving = False
+        for n, tx in targets.items():
+            if n == drag:
+                continue
+            w = self.viewer_chip_widgets.get(n)
+            if not w:
+                continue
+            cur = self._chip_cur_x.get(n, tx)
+            d = tx - cur
+            if abs(d) <= 1:
+                cur = tx
+            else:
+                cur += d * 0.35          # ~160ms ease-out
+                moving = True
+            self._chip_cur_x[n] = cur
+            try:
+                w.place(x=int(round(cur)), y=3)
+            except tk.TclError:
+                pass
+        if moving:
+            self._chip_anim_job = self.root.after(16, self._chip_anim_step)
 
     def _commit_drag(self, drag_name):
         new_order = getattr(self, '_drag_target_order', None)
         if new_order and list(new_order) != list(self._viewer_order):
             self._viewer_order = list(new_order)
             self._save_viewer_state()
-            self._render_viewer_versions()
             self._load_chapter()
-        else:
-            self._layout_chips()  # snap back to resting positions
+        # animate everyone (incl. the released chip) into their resting slots
+        self._layout_chips(animate=True)
+        self._highlight_focused_chip()
 
     def _save_viewer_state(self):
         self.settings['viewer_version_order'] = list(self._viewer_order)
