@@ -1,0 +1,34 @@
+/* BibleClip — bundled webfont (Pretendard, SIL OFL 1.1).
+   Self-hosted for offline / identical rendering on Windows + macOS.
+   src order: woff2 (smallest, what the webview actually loads) → otf (mac
+   distribution) → ttf (windows distribution). All three are shipped in
+   web/fonts/ per the design requirement to provide ttf + otf together. */
+
+@font-face {
+  font-family: "Pretendard";
+  font-style: normal; font-weight: 400; font-display: swap;
+  src: url("../fonts/Pretendard-Regular.woff2") format("woff2"),
+       url("../fonts/Pretendard-Regular.otf") format("opentype"),
+       url("../fonts/Pretendard-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Pretendard";
+  font-style: normal; font-weight: 600; font-display: swap;
+  src: url("../fonts/Pretendard-SemiBold.woff2") format("woff2"),
+       url("../fonts/Pretendard-SemiBold.otf") format("opentype"),
+       url("../fonts/Pretendard-SemiBold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Pretendard";
+  font-style: normal; font-weight: 700; font-display: swap;
+  src: url("../fonts/Pretendard-Bold.woff2") format("woff2"),
+       url("../fonts/Pretendard-Bold.otf") format("opentype"),
+       url("../fonts/Pretendard-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Pretendard";
+  font-style: normal; font-weight: 800; font-display: swap;
+  src: url("../fonts/Pretendard-ExtraBold.woff2") format("woff2"),
+       url("../fonts/Pretendard-ExtraBold.otf") format("opentype"),
+       url("../fonts/Pretendard-ExtraBold.ttf") format("truetype");
+}

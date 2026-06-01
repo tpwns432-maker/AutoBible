@@ -1,0 +1,126 @@
+/* BibleClip — design tokens (High redesign, Phase 1).
+   Single source of truth for color / type / spacing / radius / shadow.
+   Light is the default; [data-theme="dark"] on <html> swaps the palette.
+   Accent (purple/indigo) and the left rail stay constant across themes. */
+
+:root {
+  /* ---- Accent (theme-invariant) ---- */
+  --accent:        #6D4DFF;
+  --accent-2:      #5B7CFA;
+  --accent-hover:  #5B3DF0;
+  --accent-grad:   linear-gradient(135deg, #6D4DFF, #5B7CFA);
+  --on-accent:     #FFFFFF;
+  /* accent as TEXT (verse #, chip, romanization, links). Brightened in dark
+     mode for legibility on dark surfaces. */
+  --accent-text:   #6D4DFF;
+
+  /* ---- Left rail (dark in both themes) ---- */
+  --rail-bg:       #1A1330;
+  --rail-icon:     #9D92C4;
+  --rail-icon-on:  #FFFFFF;
+  --rail-icon-on-bg: rgba(255, 255, 255, .08);
+
+  /* ---- Surfaces / text (LIGHT) ---- */
+  --app-bg:        #FAF9FC;
+  --card-bg:       #FFFFFF;
+  --card-border:   #EFEBF6;
+  --card-shadow:   0 6px 22px -14px rgba(60, 40, 100, .25);
+  --text:          #241D33;
+  --text-muted:    #6A6086;
+  --text-dim:      #A99FC0;
+  --hairline:      #EEF0F3;
+
+  /* ---- Controls (LIGHT) ---- */
+  --pill-bg:       #FFFFFF;
+  --pill-border:   #E7E2F0;
+  --pill-text:     #473D63;
+  --pill-sel-bg:   #F3EFFE;
+  --pill-sel-border: var(--accent);
+  --pill-sel-text: var(--accent);
+  --seg-bg:        #F0ECF8;
+  --seg-sel-bg:    #FFFFFF;
+  --seg-text:      #6A6086;
+  --seg-sel-text:  #1A1330;
+  --seg-sel-shadow: 0 2px 6px rgba(60, 40, 100, .12);
+
+  /* ---- Scripture / original-language accents (LIGHT) ---- */
+  --vtag:          var(--accent-text);
+  --strong-bg:     #F4F1FB;
+  --strong-fg:     #8A7FB0;
+  --chip-bg:       #F3EFFE;
+  --chip-fg:       var(--accent-text);
+  --heb:           #1A1330;
+  --rom:           var(--accent-text);
+  --link:          var(--accent-text);
+
+  /* ---- Status badge (LIGHT) ---- */
+  --badge-ok-bg:   #EEF7EE;
+  --badge-ok-fg:   #5B8F5B;
+  --badge-ok-dot:  #46C160;
+  --badge-off-bg:  #F0ECF8;
+  --badge-off-fg:  #6A6086;
+  --badge-off-dot: #A99FC0;
+  --ver-pill-bg:   #F0ECF8;
+  --ver-pill-fg:   #A99FC0;
+
+  /* ---- Type ----
+     UI + scripture body both use Pretendard (bundled as ttf+otf, see
+     css/fonts.css). --font-heb is a Hebrew-capable stack for lexicon glyphs. */
+  --font-ui: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic",
+             "Segoe UI", "Noto Sans KR", system-ui, sans-serif;
+  --font-heb: "SBL Hebrew", "Times New Roman", "Noto Serif Hebrew", serif;
+
+  --fs-scripture: 14.5px;
+  --lh-scripture: 1.9;
+  --fs-heb: 48px;          /* lexicon headword (original-language) — prominent */
+
+  /* ---- Spacing scale (4px base) ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  /* ---- Radius ---- */
+  --r-sm:   8px;
+  --r-md:   10px;
+  --r-lg:   16px;
+  --r-pill: 999px;
+
+  --rail-w: 58px;
+}
+
+:root[data-theme="dark"] {
+  --accent-text:   #9A86FF;        /* brighter purple for text on dark surfaces */
+  --app-bg:        #0F0B1A;
+  --card-bg:       #171127;
+  --card-border:   #2A2140;
+  --card-shadow:   0 8px 26px -16px rgba(0, 0, 0, .7);
+  --text:          #ECE9F5;
+  --text-muted:    #A99FC6;
+  --text-dim:      #7D7399;
+  --hairline:      #241C3A;
+
+  --pill-bg:       #1D1633;
+  --pill-border:   #2A2140;
+  --pill-text:     #CFC9E4;
+  --pill-sel-bg:   #241A3F;
+  --seg-bg:        #1D1633;
+  --seg-sel-bg:    #2A2140;
+  --seg-text:      #A99FC6;
+  --seg-sel-text:  #FFFFFF;
+  --seg-sel-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+
+  --strong-bg:     #241A3F;
+  --strong-fg:     #B9AEF0;
+  --chip-bg:       #241A3F;
+  --heb:           #ECE9F5;
+
+  --badge-ok-bg:   #14301C;
+  --badge-ok-fg:   #7FD08B;
+  --badge-off-bg:  #1D1633;
+  --badge-off-fg:  #A99FC6;
+  --ver-pill-bg:   #1D1633;
+  --ver-pill-fg:   #7D7399;
+}

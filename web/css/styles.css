@@ -1,0 +1,234 @@
+/* BibleClip — component & layout styles (High redesign, Phase 1).
+   Consumes tokens.css. No data wiring yet (Phase 2). */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--app-bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ===== App shell: rail + main ===== */
+.app {
+  display: flex;
+  height: 100vh;
+  min-height: 0;
+}
+
+/* ---- Left rail ---- */
+.rail {
+  width: var(--rail-w);
+  flex: 0 0 var(--rail-w);
+  background: var(--rail-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0;
+  gap: 4px;
+}
+.rail .logo-tile {
+  width: 32px; height: 32px;
+  border-radius: 9px;
+  background: var(--accent-grad);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 8px 18px -8px rgba(109, 77, 255, .7);
+}
+.rail .nav-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--rail-icon);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.rail .nav-icon svg { width: 19px; height: 19px; }
+.rail .nav-icon:hover { color: #cfc7ea; background: rgba(255,255,255,.05); }
+.rail .nav-icon.on { background: var(--rail-icon-on-bg); color: var(--rail-icon-on); }
+.rail .spacer { flex: 1; }
+
+/* ---- Main column ---- */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ---- Top bar ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 15px 20px 11px;
+}
+.topbar .brand { font-weight: 800; font-size: 16px; color: var(--text); letter-spacing: -.01em; }
+.topbar .ver {
+  font-size: 10.5px; font-weight: 600; color: var(--ver-pill-fg);
+  background: var(--ver-pill-bg); padding: 2px 8px; border-radius: var(--r-pill);
+}
+.topbar .spacer { flex: 1; }
+
+.btn {
+  font-family: inherit;
+  font-size: 12px; font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--pill-border);
+  background: var(--pill-bg);
+  color: var(--pill-text);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .05s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary {
+  border: none; color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 8px 20px -6px rgba(109, 77, 255, .55);
+}
+.btn.primary:hover { filter: brightness(1.04); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700;
+  padding: 6px 11px; border-radius: var(--r-pill);
+  background: var(--badge-off-bg); color: var(--badge-off-fg);
+}
+.badge::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--badge-off-dot);
+}
+.badge.on { background: var(--badge-ok-bg); color: var(--badge-ok-fg); }
+.badge.on::before {
+  background: var(--badge-ok-dot);
+  box-shadow: 0 0 0 3px rgba(70, 193, 96, .2);
+}
+
+/* ---- Controls row ---- */
+.controls {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 0 20px 13px;
+}
+.seg {
+  display: inline-flex; background: var(--seg-bg);
+  border-radius: 11px; padding: 4px; gap: 2px;
+}
+.seg .opt {
+  font-size: 12px; font-weight: 600; color: var(--seg-text);
+  padding: 6px 13px; border-radius: var(--r-sm);
+  cursor: pointer; transition: background .15s, color .15s; user-select: none;
+}
+.seg .opt.on {
+  background: var(--seg-sel-bg); color: var(--seg-sel-text);
+  box-shadow: var(--seg-sel-shadow);
+}
+.pill {
+  border: 1px solid var(--pill-border); border-radius: var(--r-md);
+  background: var(--pill-bg); color: var(--pill-text);
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: border-color .15s, background .15s; user-select: none;
+}
+.pill.sel { border-color: var(--pill-sel-border); color: var(--pill-sel-text); background: var(--pill-sel-bg); }
+.pill.dropdown::after { content: " ▾"; color: var(--text-dim); }
+/* Compact "add version" button — keeps the row clean (only in-use versions
+   show as chips; everything else lives behind this). */
+.pill.add {
+  padding: 6px 10px; color: var(--text-dim);
+  border-style: dashed; font-weight: 700;
+}
+.pill.add:hover { color: var(--accent); border-color: var(--accent); border-style: solid; }
+/* subtle divider between version chips and the book/chapter group */
+.controls .vsep { width: 1px; height: 20px; background: var(--hairline); margin: 0 3px; }
+.mini {
+  width: 30px; height: 30px; border-radius: 9px;
+  border: 1px solid var(--pill-border); background: var(--pill-bg);
+  color: var(--text-muted); font-weight: 700; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: border-color .15s;
+}
+.mini:hover { border-color: var(--accent); }
+.controls .spacer { flex: 1; }
+
+/* ===== Three-panel grid ===== */
+.panels {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.05fr 1.05fr 1fr;
+  gap: 12px;
+  padding: 0 20px 18px;
+  min-height: 0;
+}
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--card-shadow);
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+.card .card-head {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+  color: var(--text-dim);
+  padding: 14px 16px 6px;
+  text-transform: uppercase;
+}
+.card .card-body {
+  padding: 2px 16px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ---- Scripture panel (sans-serif body; Strong's codes hidden here) ---- */
+.scripture { font-family: var(--font-ui); font-size: var(--fs-scripture); line-height: var(--lh-scripture); color: var(--text); }
+.scripture .v { margin-bottom: 11px; }
+.scripture .vnum {
+  color: var(--vtag); font-weight: 800; font-size: .7em;
+  vertical-align: super; margin-right: 3px; font-family: var(--font-ui);
+}
+
+/* Strong's number chip (inline, in scripture + interlinear) */
+.strong {
+  display: inline-block; font-family: var(--font-ui);
+  font-size: 9px; font-weight: 700; vertical-align: middle;
+  color: var(--strong-fg); background: var(--strong-bg);
+  border-radius: 6px; padding: 1px 5px; margin: 0 1px;
+  cursor: pointer;
+}
+.strong:hover { color: var(--accent); }
+
+/* ---- Interlinear panel ---- */
+.interlin { font-size: 13px; line-height: var(--lh-scripture); color: var(--text); }
+.interlin .v { margin-bottom: 10px; }
+.interlin .vnum { color: var(--vtag); font-weight: 800; margin-right: 4px; }
+
+/* ---- Lexicon panel ---- */
+.lex .chip {
+  display: inline-block; font-size: 10.5px; font-weight: 700;
+  color: var(--chip-fg); background: var(--chip-bg);
+  border-radius: var(--r-sm); padding: 2px 9px; margin-bottom: 8px;
+}
+.lex .lex-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.lex .lex-head .heb { font-family: var(--font-heb); font-size: var(--fs-heb); line-height: 1.15; color: var(--heb); }
+.lex .lex-head .rom { color: var(--rom); font-weight: 700; font-size: 15px; }
+.lex .lex-body { font-size: 12.5px; line-height: 1.8; color: var(--text-muted); }
+.lex .lex-body p { margin-bottom: 8px; }
+
+/* ---- Scrollbars (web view) ---- */
+.card-body::-webkit-scrollbar { width: 10px; }
+.card-body::-webkit-scrollbar-thumb {
+  background: var(--card-border); border-radius: 999px;
+  border: 3px solid var(--card-bg);
+}
+.card-body::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ---- Responsive: stack panels when narrow ---- */
+@media (max-width: 860px) {
+  .panels { grid-template-columns: 1fr; }
+}

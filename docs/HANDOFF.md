@@ -119,4 +119,11 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - `data/original_lang.py`: 모듈 상단 `import tkinter`를 `render_dict_html` 내부 지연 import로(코어 tk-free화).
 - **검증**: `python -X utf8 tests/test_core.py`(헤드리스 코어 스모크 — parse/get_chapter/build_output/search/lexicon/interlinear, **save_settings 호출 X**). + 헤드리스 CTk 렌더·별칭 배선 확인. + 가짜 클립보드로 모니터 통합(재처리 방지·키워드·수동복사 가드) 확인. 전부 통과.
 
-**남은 Phase (다음 세션):** 1 디자인 시스템(CSS 토큰) · 2 pywebview 브리지+실제 장 렌더(웹 클립보드 백엔드 결정 지점) · 3 3패널+사전 마크업→HTML 변환기 · 4 폴리싱·상태 · 5 패키징·서명. (WebView2는 Win11 기본 탑재.)
+**Phase 1 — 디자인 시스템(정적 CSS) (✅ 완료):** `web/` 폴더.
+- `css/tokens.css` — 토큰 단일 출처(색·타입·간격·라운드·그림자). 라이트 기본 + `<html data-theme="dark">` 다크. 액센트/레일은 테마 무관. `--accent-text`는 다크에서 밝은 보라(`#9A86FF`)로 분리(가시성).
+- `css/styles.css` — 레일·상단바·세그먼트·필·카드 3분할·본문·원어·사전. 토큰만 소비.
+- `css/fonts.css` + `web/fonts/` — **Pretendard v1.3.9 번들**(OFL). weight 400/600/700/800 × woff2(렌더)+otf(맥)+ttf(윈도우), ~19MB. `--font-ui` 한 곳으로 본문·UI 통일.
+- `index.html` — 앱 레이아웃 + 하드코딩 샘플(여호수아 1). `app.js`는 미리보기 인터랙션만(테마/세그먼트/배지), **데이터 배선 없음**.
+- 사용자 결정 사항(반영됨): 본문 **산세리프**(세리프 X) · 본문에 **원어코드(H####) 숨김**(원어 패널엔 유지) · 역본 칩은 **사용 중인 것만** + 점선 "＋" 추가버튼 · 사전 히브리어 헤드워드 **48px**.
+
+**남은 Phase (다음 세션):** 2 pywebview 브리지+실제 장 렌더(웹 클립보드 백엔드 결정 지점 — `Library` API를 JS에 노출) · 3 3패널 실데이터+사전 마크업→HTML 변환기 · 4 폴리싱·상태 · 5 패키징·서명(폰트 자산 PyInstaller 포함). (WebView2는 Win11 기본 탑재.)
