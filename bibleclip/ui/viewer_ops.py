@@ -389,7 +389,11 @@ class ViewerOpsMixin:
         except Exception:
             pass
 
-    def _on_book_changed(self, event):
+    def _on_book_picked(self, *_):
+        """User chose a book from the dropdown → always jump to chapter 1."""
+        self._on_book_changed(None, reset_chapter=True)
+
+    def _on_book_changed(self, event=None, reset_chapter=False):
         primary = self._get_primary_version()
         book_name = self.book_var.get()
         if not primary or not book_name or primary not in self.bible_dbs:
@@ -404,7 +408,8 @@ class ViewerOpsMixin:
         chapters = db.get_chapters(bn)
         self.chapter_combo.configure(values=[str(c) for c in chapters])
         current_chap = self.chapter_var.get()
-        if current_chap and current_chap in self.chapter_combo.cget('values'):
+        if (not reset_chapter and current_chap
+                and current_chap in self.chapter_combo.cget('values')):
             self._load_chapter()
         elif chapters:
             self.chapter_var.set(str(chapters[0]))

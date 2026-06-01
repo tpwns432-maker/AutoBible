@@ -117,7 +117,7 @@ class ViewerTabMixin:
         ctk.CTkLabel(nav, text="책", **LBL).pack(side=tk.LEFT, padx=(14, 4), pady=8)
         self.book_var = tk.StringVar()
         self.book_combo = ScrollDropdown(nav, variable=self.book_var, width=160,
-                                         command=self._on_book_changed, **OPT)
+                                         command=self._on_book_picked, **OPT)
         self.book_combo.pack(side=tk.LEFT, padx=(0, 10), pady=8)
 
         ctk.CTkLabel(nav, text="장", **LBL).pack(side=tk.LEFT, padx=(0, 4))
