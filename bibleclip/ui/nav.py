@@ -84,7 +84,7 @@ class NavMixin:
             self._next_chapter()
 
     def _prev_chapter(self):
-        chapters = list(self.chapter_combo['values'])
+        chapters = list(self.chapter_combo.cget('values'))
         if not chapters:
             return
         cur = self.chapter_var.get()
@@ -94,7 +94,7 @@ class NavMixin:
             self._load_chapter()
 
     def _next_chapter(self):
-        chapters = list(self.chapter_combo['values'])
+        chapters = list(self.chapter_combo.cget('values'))
         if not chapters:
             return
         cur = self.chapter_var.get()

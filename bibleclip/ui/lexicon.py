@@ -253,6 +253,7 @@ class LexiconMixin:
     def _on_lex_lang_seg(self, value):
         """Segmented dict-language toggle ('한글'/'영어') → lex_lang_var ('ko'/'en')."""
         self.lex_lang_var.set('ko' if value == '한글' else 'en')
+        self._restyle_segmented(self.lex_lang_seg)
         self._on_lex_lang_changed()
 
     def _on_lex_lang_changed(self):

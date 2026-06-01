@@ -115,13 +115,9 @@ class ThemeMixin:
         self.log_text.tag_configure('logref', foreground=t['accent'])
 
         self.viewer_outer.configure(bg=t['bg'])
-        self.version_bar.configure(bg=t['bg'])
-        self.chip_frame.configure(bg=t['bg'])
-        for w in self.version_bar.winfo_children():
-            if isinstance(w, tk.Label):
-                w.configure(bg=t['bg'], fg=t['fg'])
-            elif isinstance(w, tk.Frame):
-                w.configure(bg=t['bg'])
+        # version_bar is a CTk card (auto-skin); chip_frame is a tk holder that
+        # blends with the card so the placed chips sit on the card surface.
+        self.chip_frame.configure(bg=t['viewer_bg'])
         self._apply_viewer_chip_theme()
         # nav is a CTk card with CTk controls (option menus, buttons, entries,
         # segmented dict toggle) — all auto-skin via appearance mode.

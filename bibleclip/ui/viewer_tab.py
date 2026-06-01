@@ -71,18 +71,21 @@ class ViewerTabMixin:
         #   └─ activity log (full width across bottom)
         self.viewer_outer = self.tab_viewer
 
-        # Version chip bar (multi-version parallel view + reorder) — top row
-        version_bar = tk.Frame(self.tab_viewer)
-        version_bar.pack(fill=tk.X, padx=4, pady=(4, 0))
+        # Version chip bar card (multi-version parallel view + reorder)
+        version_bar = ctk.CTkFrame(self.tab_viewer, fg_color=CTK['card'],
+                                   corner_radius=12, bg_color=CTK['app_bg'])
+        version_bar.pack(fill=tk.X, padx=14, pady=(2, 4))
         self.version_bar = version_bar
 
-        tk.Label(version_bar, text="버전:", font=(UI_FONT, 9)).pack(side=tk.LEFT, padx=(0, 4))
+        ctk.CTkLabel(version_bar, text="버전", font=(UI_FONT, 11),
+                     text_color=CTK['muted']).pack(side=tk.LEFT, padx=(14, 8), pady=6)
 
-        self.chip_frame = tk.Frame(version_bar)
-        self.chip_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # tk.Frame so the chips can be placed by absolute x (drag-reorder).
+        self.chip_frame = tk.Frame(version_bar, bd=0, highlightthickness=0)
+        self.chip_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, pady=6)
 
-        tk.Label(version_bar, text="(클릭: 토글, 드래그: 순서 변경)",
-                 font=(UI_FONT, 8)).pack(side=tk.LEFT, padx=(8, 0))
+        ctk.CTkLabel(version_bar, text="(클릭: 토글 · 드래그: 순서 변경)",
+                     font=(UI_FONT, 10), text_color=CTK['muted']).pack(side=tk.LEFT, padx=(8, 14))
 
         # Initialize ordered viewer state from settings
         self._viewer_order = list(self.settings['viewer_version_order'])
@@ -172,6 +175,7 @@ class ViewerTabMixin:
             selected_hover_color=CTK['accent_hover'], unselected_color=CTK['btn'],
             unselected_hover_color=CTK['btn_hover'], text_color=CTK['btn_text'])
         self.lex_lang_seg.set("한글" if default_lang == 'ko' else "영어")
+        self._restyle_segmented(self.lex_lang_seg)
         self.lex_lang_seg.pack(side=tk.RIGHT, padx=(0, 10))
         ctk.CTkLabel(nav, text="사전", **LBL).pack(side=tk.RIGHT, padx=(8, 4))
 

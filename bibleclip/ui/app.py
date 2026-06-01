@@ -368,16 +368,19 @@ class BibleClipApp(
         self.tab_bar.set("성경 보기" if name == 'viewer' else "출력 설정")
         self._restyle_tabs()
 
-    def _restyle_tabs(self):
+    def _restyle_segmented(self, seg):
         """White text on the selected segment (CTkSegmentedButton has no
-        per-state text color, so paint the internal buttons directly)."""
+        per-state text color, so paint its internal buttons directly)."""
         try:
-            current = self.tab_bar.get()
-            for val, btn in self.tab_bar._buttons_dict.items():
-                btn.configure(text_color=CTK['on_accent'] if val == current
+            cur = seg.get()
+            for val, btn in seg._buttons_dict.items():
+                btn.configure(text_color=CTK['on_accent'] if val == cur
                               else CTK['btn_text'])
         except Exception:
             pass
+
+    def _restyle_tabs(self):
+        self._restyle_segmented(self.tab_bar)
 
     def _build_top_bar(self):
         self.top_bar = ctk.CTkFrame(self.main_frame, fg_color=CTK['card'],

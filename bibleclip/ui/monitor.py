@@ -177,10 +177,10 @@ class MonitorMixin:
             return
         short, long_ = db.books[book_num]
         target = f"{long_} ({short})"
-        if target in (self.book_combo['values'] or []):
+        if target in (self.book_combo.cget('values') or []):
             self.book_var.set(target)
             chapters = db.get_chapters(book_num)
-            self.chapter_combo['values'] = [str(c) for c in chapters]
+            self.chapter_combo.configure(values=[str(c) for c in chapters])
             self.chapter_var.set(str(chapter))
             self._load_chapter(highlight_verses=verses if verses else None)
             self._show_tab('viewer')
