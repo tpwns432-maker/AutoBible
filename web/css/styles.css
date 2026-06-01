@@ -128,6 +128,17 @@ body {
   box-shadow: 0 0 0 3px rgba(70, 193, 96, .2);
 }
 
+/* ---- Update-available banner ---- */
+.update-banner {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 20px 11px; padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--pill-sel-bg); border: 1px solid var(--accent);
+}
+.update-banner .ub-text { flex: 1; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.update-banner .ub-actions { display: flex; gap: 6px; }
+.update-banner .btn { padding: 6px 11px; }
+
 /* ---- Controls row ---- */
 .controls {
   display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
@@ -508,9 +519,10 @@ body {
   z-index: 200; pointer-events: none;
 }
 .toast {
-  background: var(--card-bg); color: var(--text);
-  border: 1px solid var(--card-border); border-radius: var(--r-pill);
-  box-shadow: 0 14px 40px -12px rgba(40, 25, 70, .45);
+  /* inverted vs the active theme (see --toast-* tokens) for high contrast */
+  background: var(--toast-bg); color: var(--toast-fg);
+  border-radius: var(--r-pill);
+  box-shadow: 0 14px 40px -12px rgba(40, 25, 70, .55);
   padding: 9px 16px; font-size: 12.5px; font-weight: 600;
   display: flex; align-items: center; gap: 8px;
   animation: toast-in .2s ease-out;

@@ -58,8 +58,18 @@
       <span class="spacer"></span>
       <button class="btn primary" id="monitor-btn">모니터링 시작</button>
       <span class="badge" id="status-badge">대기 중</span>
-      <button class="btn">업데이트 확인</button>
+      <button class="btn" id="update-btn">업데이트 확인</button>
     </header>
+
+    <!-- Update-available banner (hidden until a newer release is found). -->
+    <div class="update-banner" id="update-banner" hidden>
+      <span class="ub-text" id="ub-text"></span>
+      <span class="ub-actions">
+        <button class="btn primary" id="ub-open">릴리스 페이지 열기</button>
+        <button class="btn" id="ub-skip">이 버전 건너뛰기</button>
+        <button class="btn" id="ub-close" title="닫기">✕</button>
+      </span>
+    </div>
 
     <!-- Controls -->
     <div class="controls">

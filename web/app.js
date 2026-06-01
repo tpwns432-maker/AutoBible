@@ -166,6 +166,8 @@
     wireControls();
     wireMonitor();
     wireTabs();
+    wireUpdate();
+    if (init.auto_update_check) checkUpdate(true); // silent startup check
   }
 
   function bookName(num) {
@@ -502,6 +504,36 @@
       tipEl.style.left = Math.max(8, tx) + "px";
       tipEl.style.top = Math.max(8, ty) + "px";
     }, 400);
+  }
+
+  // ---- Update check (GitHub releases) ----
+
+  let updateInfo = null;
+
+  async function checkUpdate(silent) {
+    if (!silent) toast("업데이트 확인 중…");
+    let r = null;
+    try { r = await api().check_update(); } catch (e) { r = null; }
+    if (!r || !r.ok) { if (!silent) toast("업데이트 확인 실패"); return; }
+    // Manual check always surfaces an available update; the silent startup
+    // check respects a previously skipped version.
+    if (r.has_update && !(silent && r.skipped)) {
+      updateInfo = r;
+      $("ub-text").textContent = `새 버전 v${r.latest} 사용 가능 — 현재 v${r.current}`;
+      $("update-banner").hidden = false;
+    } else if (!silent) {
+      toast(`최신 버전입니다 (v${r.current})`);
+    }
+  }
+
+  function wireUpdate() {
+    if ($("update-btn")) $("update-btn").addEventListener("click", () => checkUpdate(false));
+    if ($("ub-open")) $("ub-open").addEventListener("click", () => api().open_releases_page());
+    if ($("ub-skip")) $("ub-skip").addEventListener("click", () => {
+      if (updateInfo) api().skip_update(updateInfo.latest);
+      $("update-banner").hidden = true;
+    });
+    if ($("ub-close")) $("ub-close").addEventListener("click", () => { $("update-banner").hidden = true; });
   }
 
   // ---- Clipboard monitoring ----

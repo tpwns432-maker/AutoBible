@@ -181,7 +181,7 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - ✅ **뷰어 수동 복사**(완료): 본문 절 클릭=단일 복사, 드래그 선택=범위 복사(`copy_reference(...,versions=state.viewer)`로 보고 있는 역본 형식). ⚠️ **pywebview는 `text_select` 기본 False** — `create_window(text_select=True)` 안 켜면 드래그 선택 자체가 안 됨(블럭도 안 보임). CSS로 읽기 패널만 `user-select:text`, 나머지 chrome은 `none`.
 - ✅ **키보드 장 이동**(완료): 본문 화면에서 ←/→ → 이전/다음 장(`chapStep`, 입력 포커스/비뷰어 시 무시).
 - ✅ **DB 새로고침**(완료): 출력설정 "출력 순서" 카드의 "DB 새로고침" → `api.refresh_databases()`(lib.refresh_databases + 버전목록 반환).
-- ⬜ **업데이트 확인/자동 업데이트**(`update.py`+`updater_ui.py`): 상단 "업데이트 확인" 버튼이 웹에선 死버튼. GitHub 릴리스 체크·다운로드·설치. **다음 작업.**
+- ◐ **업데이트 확인**(체크 완료, 설치 미구현): `api.check_update`(update.py `fetch_latest_release`+`parse_version`)/`open_releases_page`/`skip_update`, get_initial에 `auto_update_check`. 상단 버튼=수동 체크(최신이면 토스트, 새 버전이면 보라 배너+릴리스 페이지/건너뛰기), 시작 시 조용한 자동 체크(skip 존중). **인앱 다운로드·설치(.bat/.sh 교체+재시작)는 frozen 레이아웃 의존 → Phase 5에서.** 토스트는 테마 반전색(`--toast-bg/fg`)으로 가시성↑.
 - ⬜ **스크롤 동기화**: CTk 본문↔원어 패널 스크롤 동기(`_on_viewer_yscroll`). 웹 미구현(폴리시 후보).
 
 **남은 Phase:** 5 패키징·서명(`--add-data web`, 폰트 포함; WebView2는 Win11 기본). + 위 이관 누락 기능들(우선순위는 사용자와 협의).

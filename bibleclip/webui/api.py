@@ -8,6 +8,10 @@ front-end via the injected window's ``evaluate_js`` — still no `webview` impor
 """
 import json
 import re
+import webbrowser
+
+from bibleclip.config import __version__, RELEASES_PAGE_URL
+from bibleclip.update import fetch_latest_release, parse_version
 
 try:
     import pyperclip
@@ -224,6 +228,7 @@ class Api:
             'last': {'version': primary, 'book': last_book, 'chapter': last_chapter},
             'dark_mode': bool(s.get('dark_mode')),
             'font_size': int(s.get('viewer_font_size', 11)),
+            'auto_update_check': bool(s.get('auto_update_check', True)),
         }
 
     # ---- UI preferences (persisted; shared with the desktop app) ----
@@ -248,6 +253,35 @@ class Api:
         needed). Returns {added:[names], versions:[...]} for the UI to refresh."""
         added = self.lib.refresh_databases()
         return {'added': added, 'versions': self.lib.versions()}
+
+    # ---- Update check (GitHub releases) ----
+
+    def check_update(self):
+        """Check GitHub for a newer release. Returns {ok, has_update, current,
+        latest, notes, url, skipped} or {ok:False, error}. (Download/install of
+        a frozen build is deferred to packaging — see HANDOFF.)"""
+        info, error = fetch_latest_release()
+        if error or not info:
+            return {'ok': False, 'error': error or '응답 없음'}
+        has = parse_version(info['version']) > parse_version(__version__)
+        return {
+            'ok': True, 'has_update': has,
+            'current': __version__, 'latest': info['version'],
+            'notes': info.get('body') or '', 'url': info.get('download_url') or '',
+            'skipped': self.lib.settings.get('skip_update_version') == info['version'],
+        }
+
+    def open_releases_page(self):
+        try:
+            webbrowser.open(RELEASES_PAGE_URL)
+            return {'ok': True}
+        except Exception:
+            return {'ok': False}
+
+    def skip_update(self, version):
+        self.lib.settings['skip_update_version'] = version
+        self.lib.save_settings()
+        return {'ok': True}
 
     def note_position(self, book, chapter):
         """Remember the last viewed book/chapter (saved to disk on window close

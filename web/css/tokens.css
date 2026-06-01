@@ -63,6 +63,10 @@
   --ver-pill-bg:   #F0ECF8;
   --ver-pill-fg:   #A99FC0;
 
+  /* ---- Toast (inverted vs the active theme for contrast) ---- */
+  --toast-bg:      #171127;   /* light theme → dark toast */
+  --toast-fg:      #ECE9F5;
+
   /* ---- Type ----
      UI + scripture body both use Pretendard (bundled as ttf+otf, see
      css/fonts.css). --font-heb is a Hebrew-capable stack for lexicon glyphs. */
@@ -124,4 +128,7 @@
   --badge-off-fg:  #A99FC6;
   --ver-pill-bg:   #1D1633;
   --ver-pill-fg:   #7D7399;
+
+  --toast-bg:      #FFFFFF;   /* dark theme → light toast */
+  --toast-fg:      #241D33;
 }

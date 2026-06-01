@@ -225,6 +225,19 @@ def main():
     assert api.lib.settings['last_book_num'] == 500 and api.lib.settings['last_chapter'] == 3
     print("ui prefs (font/dark/position) OK")
 
+    # update check: stub the network so the test stays offline/deterministic
+    apimod_local.fetch_latest_release = lambda timeout=8: (
+        {'version': 'v99.0.0', 'download_url': 'http://x/a.zip',
+         'asset_name': 'a.zip', 'body': 'notes'}, '')
+    up = api.check_update()
+    assert up['ok'] and up['has_update'] and up['latest'] == 'v99.0.0', up
+    api.skip_update('v99.0.0')
+    assert api.lib.settings['skip_update_version'] == 'v99.0.0'
+    assert api.check_update()['skipped'] is True
+    apimod_local.fetch_latest_release = lambda timeout=8: (None, '네트워크 오류')
+    assert api.check_update()['ok'] is False
+    print("check_update (stubbed) OK")
+
     monitor_check()
 
     print("\nALL WEBUI API CHECKS PASSED ✅")
