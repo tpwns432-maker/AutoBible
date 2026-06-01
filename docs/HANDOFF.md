@@ -1,7 +1,7 @@
 # BibleClip — 작업 인계 노트 (HANDOFF)
 
 > 대화를 `/clear` 한 뒤 다음 세션이 빠르게 이어받기 위한 문서.
-> 최종 업데이트: **v1.5.3 릴리스 완료** (2026-06-01) — main 머지·태그·CI 배포 모두 끝. CI green, Win zip + Mac zip + dmg 게시 완료.
+> 최종 업데이트: **v1.5.4 — 웹(pywebview) UI로 전환 릴리스 진행** (2026-06-02). High 리라이트 완료(Phase 0~5), CTk→웹 대체. main 머지+태그 v1.5.4 push로 CI가 웹 Win/Mac 빌드·릴리스. (CTk 빌드 잡 제거됨.)
 
 ---
 

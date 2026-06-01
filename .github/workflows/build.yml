@@ -1,8 +1,10 @@
 name: Build and Release
 
-# Push a tag like v1.1.7 to build Windows + macOS and attach the zips to a
-# GitHub Release. Or run manually (workflow_dispatch) to just get the zips as
-# downloadable artifacts without creating a release.
+# Push a tag like v1.5.4 to build the BibleClip web app (pywebview) for
+# Windows + macOS and attach the zips/dmg to a GitHub Release. Or run manually
+# (workflow_dispatch) to get the builds as downloadable artifacts without a
+# release. (As of v1.5.4 the app is the pywebview "web" UI; the legacy
+# CustomTkinter entry point bibleclip_app.py is no longer built/shipped.)
 on:
   push:
     tags:
@@ -15,46 +17,6 @@ permissions:
 jobs:
   # -------------------------------------------------------------------
   build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter
-
-      - name: Build BibleClip.exe
-        run: >
-          python -m PyInstaller --onedir --windowed --noconfirm --clean
-          --collect-submodules bibleclip --collect-all customtkinter
-          --icon=icon.ico --name BibleClip bibleclip_app.py
-
-      - name: Assemble package
-        shell: pwsh
-        run: |
-          $v = ([regex]::Match((Get-Content bibleclip/_version.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
-          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Copy-Item icon.ico dist/BibleClip/ -Force
-          New-Item -ItemType Directory -Force dist/BibleClip/bible_versions | Out-Null
-          Copy-Item bible_versions/KRV.SQLite3 dist/BibleClip/bible_versions/ -Force
-          New-Item -ItemType Directory -Force dist/BibleClip/original_lang | Out-Null
-          Copy-Item original_lang/* dist/BibleClip/original_lang/ -Force
-          Compress-Archive -Path dist/BibleClip/* -DestinationPath "BibleClip-windows-v$v.zip" -Force
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows
-          path: BibleClip-windows-*.zip
-
-  # -------------------------------------------------------------------
-  # Web UI (pywebview/WebView2) — BETA. Built as a downloadable workflow
-  # artifact only; deliberately NOT attached to the public release (the
-  # shipping app is still CustomTkinter). Asset name carries "BibleClipWeb"
-  # so it can never be confused with the CTk "BibleClip-windows" zip.
-  build-web-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,13 +49,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: web-windows-beta
+          name: windows
           path: BibleClipWeb-windows-*.zip
 
   # -------------------------------------------------------------------
-  # Web UI (pywebview/WKWebView) on macOS — BETA artifact only (see
-  # build-web-windows). Mirrors build-macos but for bibleclip_web.py.
-  build-web-macos:
+  build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -128,72 +88,7 @@ jobs:
             APP="dist/BibleClipWeb/BibleClipWeb.app"
           fi
           # Data INSIDE the bundle (Contents/MacOS) — config.candidate_data_roots
-          # checks the executable dir, so it's found there.
-          MACOS="$APP/Contents/MacOS"
-          mkdir -p "$MACOS/bible_versions" && cp bible_versions/KRV.SQLite3 "$MACOS/bible_versions/"
-          mkdir -p "$MACOS/original_lang" && cp original_lang/* "$MACOS/original_lang/"
-          PLIST="$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$PLIST" 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $V" "$PLIST" 2>/dev/null \
-            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $V" "$PLIST"
-          # Re-sign ad-hoc (copying data invalidated PyInstaller's signature).
-          codesign --force --deep --sign - "$APP" || echo "codesign failed (continuing)"
-          OUT="BibleClipWeb-mac"
-          rm -rf "$OUT" && mkdir -p "$OUT"
-          ditto "$APP" "$OUT/BibleClipWeb.app"
-          ( cd "$OUT" && zip -r -y "../BibleClipWeb-macos-v$V.zip" . )
-          STAGE="dmg_stage_web"
-          rm -rf "$STAGE" && mkdir -p "$STAGE"
-          ditto "$APP" "$STAGE/BibleClipWeb.app"
-          ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "BibleClipWeb" -srcfolder "$STAGE" -ov \
-            -format UDZO "BibleClipWeb-macos-v$V.dmg"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-macos-beta
-          path: |
-            BibleClipWeb-macos-*.zip
-            BibleClipWeb-macos-*.dmg
-
-  # -------------------------------------------------------------------
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter
-
-      - name: Generate icns icon
-        run: |
-          if [ -f icon.png ]; then
-            sips -s format icns icon.png --out icon.icns || echo "icns conversion failed; building without icon"
-          fi
-
-      - name: Build BibleClip.app
-        run: |
-          if [ -f icon.icns ]; then
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --collect-all customtkinter --icon=icon.icns --name BibleClip bibleclip_app.py
-          else
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --collect-all customtkinter --name BibleClip bibleclip_app.py
-          fi
-
-      - name: Assemble package
-        run: |
-          V=$(python -c "import re;print(re.search(r'__version__\s*=\s*\"(.+?)\"', open('bibleclip/_version.py').read()).group(1))")
-          if [ -d dist/BibleClip.app ]; then
-            APP="dist/BibleClip.app"
-          else
-            APP="dist/BibleClip/BibleClip.app"
-          fi
-          # Bundle data INSIDE the .app so it survives App Translocation and the
-          # app being moved (data sits next to the executable in Contents/MacOS).
+          # checks the executable dir, so it's found there even after the app moves.
           MACOS="$APP/Contents/MacOS"
           mkdir -p "$MACOS/bible_versions" && cp bible_versions/KRV.SQLite3 "$MACOS/bible_versions/"
           mkdir -p "$MACOS/original_lang" && cp original_lang/* "$MACOS/original_lang/"
@@ -203,30 +98,29 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $V" "$PLIST"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $V" "$PLIST" 2>/dev/null \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $V" "$PLIST"
-          # Copying into the bundle invalidated PyInstaller's signature, which
-          # makes macOS report the app as "damaged". Re-sign ad-hoc to re-seal.
+          # Re-sign ad-hoc (copying data invalidated PyInstaller's signature, which
+          # otherwise makes macOS report the app as "damaged").
           codesign --force --deep --sign - "$APP" || echo "codesign failed (continuing)"
-          # Copy with ditto (NOT cp -R) so the code signature is preserved;
-          # cp -R breaks signing and macOS then reports the app as "damaged".
-          OUT="BibleClip-mac"
+          # ditto (NOT cp -R) preserves the signature.
+          OUT="BibleClipWeb-mac"
           rm -rf "$OUT" && mkdir -p "$OUT"
-          ditto "$APP" "$OUT/BibleClip.app"
+          ditto "$APP" "$OUT/BibleClipWeb.app"
           # zip — used by the in-app auto-updater
-          ( cd "$OUT" && zip -r -y "../BibleClip-macos-v$V.zip" . )
+          ( cd "$OUT" && zip -r -y "../BibleClipWeb-macos-v$V.zip" . )
           # dmg — friendly drag-to-Applications installer
           STAGE="dmg_stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          ditto "$APP" "$STAGE/BibleClip.app"
+          ditto "$APP" "$STAGE/BibleClipWeb.app"
           ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "BibleClip" -srcfolder "$STAGE" -ov \
-            -format UDZO "BibleClip-macos-v$V.dmg"
+          hdiutil create -volname "BibleClipWeb" -srcfolder "$STAGE" -ov \
+            -format UDZO "BibleClipWeb-macos-v$V.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: |
-            BibleClip-macos-*.zip
-            BibleClip-macos-*.dmg
+            BibleClipWeb-macos-*.zip
+            BibleClipWeb-macos-*.dmg
 
   # -------------------------------------------------------------------
   release:
