@@ -67,20 +67,23 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - [ ] (참고) 세그먼트 버튼 텍스트색은 CTk가 상태별 분리를 못 해 `_restyle_segmented`로 직접 칠함 —
   `_apply_theme`에서 `_settings_segs`/`tab_bar`/`lex_lang_seg`를 다시 칠하도록 해둠.
 
-## 5. 빌드 / 릴리스 절차
+## 5. 빌드 / 릴리스 절차 (v1.5.4부터 = 웹 앱)
 1. 작업용 브랜치에서 진행, **단계마다 커밋**.
-2. `bibleclip/_version.py` 버전 올리고 **`docs/CHANGELOG.md` 같이 갱신**(메모리 규칙).
-3. **프리즈 빌드로 직접 테스트** (CTk는 PyInstaller에서 자산 누락 잦음):
+2. `bibleclip/_version.py` 버전 올리고 **`docs/CHANGELOG.md` + `사용법.txt` 같이 갱신**(메모리 규칙 [[changelog-on-version-bump]]). 사용법.txt는 이번 버전에서 바뀐 동작/UI 부분을 반영.
+3. **프리즈 빌드로 직접 테스트** (로컬 Windows):
    ```
    python -m PyInstaller --onedir --windowed --noconfirm --clean \
-     --collect-submodules bibleclip --collect-all customtkinter \
-     --icon=icon.ico --name BibleClip --distpath dist_test --workpath build_test bibleclip_app.py
-   # 그 뒤 dist_test/BibleClip/ 에 bible_versions, original_lang, icon.ico, autobible_settings.json 복사 후 실행
+     --collect-submodules bibleclip --hidden-import pyperclip --add-data "web;web" \
+     --icon=icon.ico --name BibleClipWeb --distpath dist_web --workpath build_web bibleclip_web.py
+   # 그 뒤 dist_web/BibleClipWeb/ 에 bible_versions, original_lang, icon.ico 복사 후 실행
+   # (packaging/build_web.ps1이 이걸 자동화)
    ```
 4. `main`에 **fast-forward 머지** → `git push origin main`.
-5. `git tag -a vX.Y.Z -m ...` → `git push origin vX.Y.Z` → CI가 Win+Mac+dmg 빌드/릴리스.
+5. `git tag -a vX.Y.Z -m ...` → `git push origin vX.Y.Z` → CI가 웹 Win(zip)+Mac(zip/dmg) 빌드/릴리스. **자산명 `BibleClipWeb-*`, `사용법.txt` 자동 동봉.**
 6. CI 확인은 **GitHub REST API 폴링**(이 환경엔 `gh` CLI 없음):
    `https://api.github.com/repos/tpwns432-maker/AutoBible/actions/runs` 및 `/releases/latest`.
+   - 베타만 만들려면(릴리스 없이): 깃허브 웹 Actions → "Run workflow"(workflow_dispatch)로 브랜치 선택 실행 → 아티팩트만 생성, `release` 잡은 skipped.
+   - ⚠️ CI 의존성은 `-r requirements.txt`로 설치(pyperclip 포함 필수 — 빠지면 모니터링·복사 조용히 실패).
 
 ## 6. ⚠️ 반드시 지킬 것 (호된 교훈 포함)
 - **헤드리스 테스트 시 설정 저장 메서드 호출 금지.** `_commit_drag`/`_save_settings`/`_on_close`는 `_save_settings`가 `root.geometry()`를 저장하는데, 창을 `withdraw()`하면 200x200 같은 값이 저장돼 **사용자의 `bibleclip_settings.json`이 오염됨**. 실제로 한 번 망가뜨려 창 크기를 손으로 복원했음. 테스트는 빌드/렌더만:

@@ -41,6 +41,7 @@ jobs:
         run: |
           $v = ([regex]::Match((Get-Content bibleclip/_version.py -Raw), '__version__\s*=\s*"(.+?)"')).Groups[1].Value
           Copy-Item icon.ico dist/BibleClipWeb/ -Force
+          Copy-Item 사용법.txt dist/BibleClipWeb/ -Force
           New-Item -ItemType Directory -Force dist/BibleClipWeb/bible_versions | Out-Null
           Copy-Item bible_versions/KRV.SQLite3 dist/BibleClipWeb/bible_versions/ -Force
           New-Item -ItemType Directory -Force dist/BibleClipWeb/original_lang | Out-Null
@@ -105,12 +106,14 @@ jobs:
           OUT="BibleClipWeb-mac"
           rm -rf "$OUT" && mkdir -p "$OUT"
           ditto "$APP" "$OUT/BibleClipWeb.app"
+          cp 사용법.txt "$OUT/"
           # zip — used by the in-app auto-updater
           ( cd "$OUT" && zip -r -y "../BibleClipWeb-macos-v$V.zip" . )
           # dmg — friendly drag-to-Applications installer
           STAGE="dmg_stage"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           ditto "$APP" "$STAGE/BibleClipWeb.app"
+          cp 사용법.txt "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "BibleClipWeb" -srcfolder "$STAGE" -ov \
             -format UDZO "BibleClipWeb-macos-v$V.dmg"

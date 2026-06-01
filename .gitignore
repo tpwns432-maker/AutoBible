@@ -27,7 +27,6 @@ Thumbs.db
 
 # Misc local files
 image.jpg
-사용법.txt
 *.png
 !icon.png
 
