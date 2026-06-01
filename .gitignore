@@ -6,6 +6,10 @@ __pycache__/
 # PyInstaller
 build/
 dist/
+build_test/
+dist_test/
+build_web/
+dist_web/
 *.spec
 
 # User runtime data (created at first launch)

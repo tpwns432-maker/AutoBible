@@ -184,4 +184,10 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - ◐ **업데이트 확인**(체크 완료, 설치 미구현): `api.check_update`(update.py `fetch_latest_release`+`parse_version`)/`open_releases_page`/`skip_update`, get_initial에 `auto_update_check`. 상단 버튼=수동 체크(최신이면 토스트, 새 버전이면 보라 배너+릴리스 페이지/건너뛰기), 시작 시 조용한 자동 체크(skip 존중). **인앱 다운로드·설치(.bat/.sh 교체+재시작)는 frozen 레이아웃 의존 → Phase 5에서.** 토스트는 테마 반전색(`--toast-bg/fg`)으로 가시성↑.
 - ✅ **스크롤 동기화**(완료): 본문(#scripture) 스크롤→원어(#interlin) 단방향 동기. 본문 행에 `data-v`, 최상단 보이는 절 찾아 원어 패널 `scrollTop` 정렬, rAF 스로틀(`syncInterlinToScripture`).
 
-**남은 Phase:** 5 패키징·서명(`--add-data web`, 폰트 포함; WebView2는 Win11 기본). + 위 이관 누락 기능들(우선순위는 사용자와 협의).
+**Phase 5 — 패키징 (◐ 진행: Windows 로컬 빌드·실행 검증 완료):**
+- 빌드 스크립트 `packaging/build_web.ps1`: `python -m PyInstaller --onedir --windowed --collect-submodules bibleclip --add-data "web;web" --icon=icon.ico --name BibleClipWeb --distpath dist_web --workpath build_web bibleclip_web.py` + 데이터 폴더(bible_versions/original_lang/icon) exe 옆 복사.
+- pywebview는 자체 PyInstaller 훅(`webview/__pyinstaller/hook-webview.py`)으로 WebView2 백엔드 수집, pythonnet도 `hook-clr.py` 자동 → 별도 `--collect-all` 불필요. `web/`(폰트 포함)는 `_internal/web/`에 번들, 런타임은 `config.get_resource_dir()`=`sys._MEIPASS`로 해석.
+- **검증**: 로컬 `dist_web\BibleClipWeb\BibleClipWeb.exe` 정상 기동·렌더(폰트 포함)·전 기능 동작 사용자 확인. `.gitignore`에 `build_web/`·`dist_web/` 추가(산출물 미추적).
+- **남은 5 항목**: ⬜ 업데이트 **인앱 설치** 연결(`updater_ui` 다운로드+.bat 교체+재시작을 웹 frozen 레이아웃에 맞춰 이식; 이제 레이아웃 확보됨) · ⬜ **CI 워크플로에 웹 빌드 잡 추가**(현재 build.yml은 CTk만; 웹은 별도 아티팩트 or 전환 결정) · ⬜ macOS 빌드(`web:web`, .app) · 코드서명.
+
+**병행 전략 현황:** main=CTk v1.5.3 배포 중. 웹은 `feat/web-engine-facade`(미머지, 다수 커밋). 기능 동등+패키징 안정 시 전환 결정.
