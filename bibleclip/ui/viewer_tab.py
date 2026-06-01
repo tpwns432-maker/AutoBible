@@ -2,6 +2,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
+
+from bibleclip.ui.widgets import ScrollDropdown
 import sqlite3
 import os
 import sys
@@ -109,21 +111,20 @@ class ViewerTabMixin:
                    border_color=CTK['card_border'], text_color=CTK['text'],
                    font=(UI_FONT, 11))
         OPT = dict(height=30, corner_radius=8, fg_color=CTK['btn'],
-                   button_color=CTK['accent'], button_hover_color=CTK['accent_hover'],
-                   text_color=CTK['btn_text'], dropdown_fg_color=CTK['card'],
-                   dropdown_text_color=CTK['text'], dropdown_hover_color=CTK['btn'],
+                   hover_color=CTK['btn_hover'], text_color=CTK['btn_text'],
                    font=(UI_FONT, 11))
 
         ctk.CTkLabel(nav, text="책", **LBL).pack(side=tk.LEFT, padx=(14, 4), pady=8)
         self.book_var = tk.StringVar()
-        self.book_combo = ctk.CTkOptionMenu(nav, variable=self.book_var, width=150,
-                                            command=self._on_book_changed, **OPT)
+        self.book_combo = ScrollDropdown(nav, variable=self.book_var, width=160,
+                                         command=self._on_book_changed, **OPT)
         self.book_combo.pack(side=tk.LEFT, padx=(0, 10), pady=8)
 
         ctk.CTkLabel(nav, text="장", **LBL).pack(side=tk.LEFT, padx=(0, 4))
         self.chapter_var = tk.StringVar()
-        self.chapter_combo = ctk.CTkOptionMenu(nav, variable=self.chapter_var, width=74,
-                                               command=self._on_chapter_changed, **OPT)
+        self.chapter_combo = ScrollDropdown(nav, variable=self.chapter_var, width=80,
+                                            command=self._on_chapter_changed,
+                                            max_visible=16, **OPT)
         self.chapter_combo.pack(side=tk.LEFT, padx=(0, 6))
 
         self.prev_btn = ctk.CTkButton(nav, text="‹", width=32,
