@@ -24,12 +24,12 @@ jobs:
           python-version: '3.12'
 
       - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller certifi
+        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter
 
       - name: Build BibleClip.exe
         run: >
           python -m PyInstaller --onedir --windowed --noconfirm --clean
-          --collect-submodules bibleclip
+          --collect-submodules bibleclip --collect-all customtkinter
           --icon=icon.ico --name BibleClip bibleclip_app.py
 
       - name: Assemble package
@@ -60,7 +60,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller certifi
+        run: python -m pip install --upgrade pip pyinstaller certifi customtkinter
 
       - name: Generate icns icon
         run: |
@@ -71,9 +71,9 @@ jobs:
       - name: Build BibleClip.app
         run: |
           if [ -f icon.icns ]; then
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --icon=icon.icns --name BibleClip bibleclip_app.py
+            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --collect-all customtkinter --icon=icon.icns --name BibleClip bibleclip_app.py
           else
-            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --name BibleClip bibleclip_app.py
+            python -m PyInstaller --onedir --windowed --noconfirm --clean --collect-submodules bibleclip --collect-all customtkinter --name BibleClip bibleclip_app.py
           fi
 
       - name: Assemble package

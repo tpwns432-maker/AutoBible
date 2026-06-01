@@ -1,0 +1,4 @@
+# BibleClip runtime/build dependencies
+# (stdlib + tkinter cover most; these are the third-party extras)
+customtkinter>=5.2.2
+certifi

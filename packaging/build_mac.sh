@@ -18,7 +18,7 @@ PYTHON="${PYTHON:-python3}"
 
 echo "==> Installing PyInstaller (in current Python environment)"
 "$PYTHON" -m pip install --upgrade pip >/dev/null
-"$PYTHON" -m pip install --upgrade pyinstaller certifi
+"$PYTHON" -m pip install --upgrade pyinstaller certifi customtkinter
 
 echo "==> Cleaning previous build output"
 rm -rf build dist *.spec
@@ -39,7 +39,7 @@ fi
 
 echo "==> Building BibleClip.app with PyInstaller"
 "$PYTHON" -m PyInstaller --onedir --windowed --noconfirm --clean \
-  --collect-submodules bibleclip --name BibleClip $ICON_ARG bibleclip_app.py
+  --collect-submodules bibleclip --collect-all customtkinter --name BibleClip $ICON_ARG bibleclip_app.py
 
 # Locate the produced .app (PyInstaller may place it at dist/BibleClip.app)
 APP=""

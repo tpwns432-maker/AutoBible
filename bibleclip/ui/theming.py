@@ -91,8 +91,11 @@ class ThemeMixin:
                   fieldbackground=[('readonly', t['entry_bg'])],
                   foreground=[('readonly', t['entry_fg'])])
 
-        # Root
-        self.root.configure(bg=t['bg'])
+        # Root — CustomTkinter's CTk root takes fg_color, not tk's bg.
+        try:
+            self.root.configure(bg=t['bg'])
+        except (tk.TclError, ValueError):
+            self.root.configure(fg_color=t['bg'])
         self.main_frame.configure(bg=t['bg'])
 
         # Top bar

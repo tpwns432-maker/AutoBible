@@ -1,6 +1,7 @@
 """BibleClip application window: assembles the UI mixins."""
 import tkinter as tk
 from tkinter import ttk, messagebox
+import customtkinter as ctk
 import sqlite3
 import os
 import sys
@@ -145,6 +146,7 @@ class BibleClipApp(
         self._load_settings()
 
         self.theme = DARK_THEME if self.settings['dark_mode'] else LIGHT_THEME
+        ctk.set_appearance_mode('dark' if self.settings['dark_mode'] else 'light')
 
         # Collect all themed widgets for easy re-theming
         self._themed_widgets = []
@@ -373,7 +375,10 @@ class BibleClipApp(
 
 
 def main():
-    root = tk.Tk()
+    # CustomTkinter root (Medium redesign). Appearance mode is set from the
+    # saved dark_mode setting inside BibleClipApp.__init__.
+    ctk.set_default_color_theme("blue")
+    root = ctk.CTk()
     BibleClipApp(root)
     root.mainloop()
 
