@@ -499,10 +499,50 @@
     return b;
   }
 
-  async function commitOrder(next) {
-    setState.output_order = await api().set_output_order(next);
+  // Snapshot each order-row's vertical position (by version) for FLIP animation.
+  function rowTops() {
+    const m = new Map();
+    $("set-order").querySelectorAll(".order-row").forEach((el) => {
+      m.set(el.dataset.ver, el.getBoundingClientRect().top);
+    });
+    return m;
+  }
+
+  // FLIP: rows present before & after slide from their old position to the new
+  // one, so a ↑/↓ swap reads as the two rows visibly trading places.
+  function flipReorder(prev) {
+    const rows = $("set-order").querySelectorAll(".order-row");
+    rows.forEach((el) => {
+      const before = prev.get(el.dataset.ver);
+      if (before == null) return; // newly added row — just appears
+      const dy = before - el.getBoundingClientRect().top;
+      if (!dy) return;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${dy}px)`;
+    });
+    requestAnimationFrame(() => {
+      rows.forEach((el) => {
+        if (!el.style.transform) return;
+        el.style.transition = "transform .22s cubic-bezier(.2,.8,.25,1)";
+        el.style.transform = "";
+      });
+    });
+  }
+
+  // Optimistic reorder: update + render + animate immediately, persist in the
+  // background, and reconcile only if the backend disagrees (it shouldn't).
+  function commitOrder(next) {
+    const prev = rowTops();
+    setState.output_order = next.slice();
     renderOrder();
+    flipReorder(prev);
     refreshPreview();
+    api().set_output_order(next).then((cleaned) => {
+      if (cleaned && cleaned.join(" ") !== next.join(" ")) {
+        setState.output_order = cleaned;
+        renderOrder();
+      }
+    });
   }
 
   function renderOrder() {
@@ -518,6 +558,7 @@
       order.forEach((name, i) => {
         const row = document.createElement("div");
         row.className = "order-row";
+        row.dataset.ver = name;
         row.innerHTML =
           `<span class="order-idx">${i + 1}</span>` +
           `<span class="order-name">${esc(name)}<span class="order-disp">${esc(dispOf(name))}</span></span>`;

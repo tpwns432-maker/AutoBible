@@ -157,6 +157,6 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - `web/`: 상단 탭 `#tab-seg`(성경 보기/출력 설정)이 `#viewer-view`↔`#settings-view` 전환 + `#viewer-controls` 숨김. 설정뷰는 lazy 로드. **표기 설정**(7개 세그 + 토글 3개), **출력 순서**(↑↓✕ + ＋역본추가 메뉴), **미리보기**(요 1:1-3, 변경 즉시 갱신). 포맷 행은 JS config(`FORMAT_ROWS`/`TOGGLE_ROWS`)로 렌더(구분기호 `' '` 값이 HTML 속성 인코딩에 안 깨지게).
 - ⚠️ CSS: 전역 `[hidden]{display:none !important}` 추가 — `.panels`/`.drawer` 등 display 규칙이 `[hidden]`을 이기던 문제 일괄 해결.
 - **검증**: `tests/test_webui_api.py` — get_settings/set_setting(enum·bool·미지키)/set_output_order(필터·dedup)/get_preview(실데이터·빈순서 플레이스홀더), **save_settings 스텁**. 사용자 실창 OK(탭 전환·미리보기·순서·모니터 반영).
-- **다음 후보(사용자 요청)**: 출력 순서 ↑↓ 시 **두 행 스왑 애니메이션**(변경을 시각적으로 명확히).
+- **출력 순서 FLIP 애니메이션 (✅ 완료, 사용자 OK)**: ↑↓/제거 시 행이 자리를 미끄러져 바뀜. `commitOrder`를 낙관적(즉시 재렌더+`flipReorder`)으로 전환하고 백엔드 저장은 백그라운드 reconcile. `rowTops()`로 이전 top 기록→재렌더→이전위치 transform→rAF에서 transition으로 복귀(.22s). 행에 `data-ver`.
 
 **남은 Phase:** 3d 검색 패널 + 사전 헤드워드/마크업 정교화 · 4 폴리싱·상태 · 5 패키징·서명(`--add-data web`, 폰트 포함). (WebView2는 Win11 기본 탑재.)
