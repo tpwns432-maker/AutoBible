@@ -56,7 +56,7 @@ from bibleclip.core.engine import Engine
 from bibleclip.data.bible_db import BibleDB
 
 
-from bibleclip.theme import LIGHT_THEME, DARK_THEME
+from bibleclip.theme import LIGHT_THEME, DARK_THEME, CTK
 
 
 from bibleclip.core.formatter import Formatter
@@ -322,53 +322,86 @@ class BibleClipApp(
     # ---- UI ----
 
     def _build_ui(self):
-        self.main_frame = tk.Frame(self.root)
+        self.main_frame = ctk.CTkFrame(self.root, corner_radius=0,
+                                       fg_color=CTK['app_bg'])
         self.main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Top bar
         self._build_top_bar()
 
-        # Notebook (tabs)
-        self.notebook = ttk.Notebook(self.main_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+        # Segmented tab switcher (replaces ttk.Notebook)
+        self.tab_bar = ctk.CTkSegmentedButton(
+            self.main_frame, values=["성경 보기", "출력 설정"],
+            command=self._on_tab_change, font=(UI_FONT, 12, 'bold'),
+            height=34, corner_radius=10,
+            fg_color=CTK['btn'], selected_color=CTK['accent'],
+            selected_hover_color=CTK['accent_hover'], unselected_color=CTK['btn'],
+            unselected_hover_color=CTK['btn_hover'], text_color=CTK['btn_text'])
+        self.tab_bar.pack(anchor='w', padx=14, pady=(0, 8))
 
-        # Tab 1: Bible Viewer
-        self.tab_viewer = tk.Frame(self.notebook)
-        self.notebook.add(self.tab_viewer, text='  성경 보기  ')
+        # Tab content container (tab frames remain tk so existing builders work)
+        self.tab_container = ctk.CTkFrame(self.main_frame, corner_radius=0,
+                                          fg_color=CTK['app_bg'])
+        self.tab_container.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 6))
 
-        # Tab 2: Settings
-        self.tab_settings = tk.Frame(self.notebook)
-        self.notebook.add(self.tab_settings, text='  출력 설정  ')
+        self.tab_viewer = tk.Frame(self.tab_container)
+        self.tab_settings = tk.Frame(self.tab_container)
+        self._current_tab = 'viewer'
+        self.tab_viewer.pack(fill=tk.BOTH, expand=True)
 
         self._build_viewer_tab()
         self._build_settings_tab()
+        self.tab_bar.set("성경 보기")
+
+    def _on_tab_change(self, value):
+        self._show_tab('viewer' if value == "성경 보기" else 'settings')
+
+    def _show_tab(self, name):
+        """Switch the visible tab frame (replaces ttk.Notebook.select)."""
+        self.tab_viewer.pack_forget()
+        self.tab_settings.pack_forget()
+        frame = self.tab_viewer if name == 'viewer' else self.tab_settings
+        frame.pack(fill=tk.BOTH, expand=True)
+        self._current_tab = name
+        # .set() updates the segment without firing the command callback
+        self.tab_bar.set("성경 보기" if name == 'viewer' else "출력 설정")
 
     def _build_top_bar(self):
-        self.top_bar = tk.Frame(self.main_frame, height=48)
-        self.top_bar.pack(fill=tk.X, padx=8, pady=6)
+        self.top_bar = ctk.CTkFrame(self.main_frame, fg_color=CTK['card'],
+                                    corner_radius=14)
+        self.top_bar.pack(fill=tk.X, padx=14, pady=(12, 8))
 
-        self.title_label = tk.Label(self.top_bar, text="BibleClip",
-                                      font=(UI_FONT, 16, 'bold'))
-        self.title_label.pack(side=tk.LEFT, padx=(4, 20))
+        self.title_label = ctk.CTkLabel(
+            self.top_bar, text="BibleClip", font=(UI_FONT, 18, 'bold'),
+            text_color=CTK['accent'])
+        self.title_label.pack(side=tk.LEFT, padx=(18, 18), pady=9)
 
-        self.monitor_btn = tk.Button(
-            self.top_bar, text="  모니터링 시작  ", font=(UI_FONT, 10),
-            relief=tk.FLAT, cursor='hand2', command=self._toggle_monitoring)
-        self.monitor_btn.pack(side=tk.LEFT, padx=4)
+        self.monitor_btn = ctk.CTkButton(
+            self.top_bar, text="모니터링 시작", command=self._toggle_monitoring,
+            font=(UI_FONT, 12, 'bold'), corner_radius=999, width=128, height=34,
+            fg_color=CTK['accent'], hover_color=CTK['accent_hover'],
+            text_color=CTK['on_accent'])
+        self.monitor_btn.pack(side=tk.LEFT, padx=4, pady=9)
 
-        self.status_label = tk.Label(self.top_bar, text=" 대기 중 ",
-                                       font=(UI_FONT, 9), padx=8, pady=2)
-        self.status_label.pack(side=tk.LEFT, padx=8)
+        self.status_label = ctk.CTkLabel(
+            self.top_bar, text="대기 중", font=(UI_FONT, 11, 'bold'),
+            corner_radius=999, height=28,
+            fg_color=CTK['status_off_bg'], text_color=CTK['status_off_fg'])
+        self.status_label.pack(side=tk.LEFT, padx=10, pady=9, ipadx=8)
 
-        self.dark_btn = tk.Button(
-            self.top_bar, text="  다크 모드  ", font=(UI_FONT, 9),
-            relief=tk.FLAT, cursor='hand2', command=self._toggle_dark_mode)
-        self.dark_btn.pack(side=tk.RIGHT, padx=4)
+        self.dark_btn = ctk.CTkButton(
+            self.top_bar, text="다크 모드", command=self._toggle_dark_mode,
+            font=(UI_FONT, 11), corner_radius=999, width=94, height=32,
+            fg_color=CTK['btn'], hover_color=CTK['btn_hover'],
+            text_color=CTK['btn_text'])
+        self.dark_btn.pack(side=tk.RIGHT, padx=(4, 18), pady=9)
 
-        self.update_check_btn = tk.Button(
-            self.top_bar, text=" 업데이트 확인 ", font=(UI_FONT, 9),
-            relief=tk.FLAT, cursor='hand2', command=self._manual_update_check)
-        self.update_check_btn.pack(side=tk.RIGHT, padx=4)
+        self.update_check_btn = ctk.CTkButton(
+            self.top_bar, text="업데이트 확인", command=self._manual_update_check,
+            font=(UI_FONT, 11), corner_radius=999, width=110, height=32,
+            fg_color=CTK['btn'], hover_color=CTK['btn_hover'],
+            text_color=CTK['btn_text'])
+        self.update_check_btn.pack(side=tk.RIGHT, padx=4, pady=9)
 
     # ---- Viewer Tab ----
 

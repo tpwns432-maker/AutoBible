@@ -55,7 +55,7 @@ from bibleclip.core.engine import Engine
 from bibleclip.data.bible_db import BibleDB
 
 
-from bibleclip.theme import LIGHT_THEME, DARK_THEME
+from bibleclip.theme import LIGHT_THEME, DARK_THEME, CTK
 
 
 from bibleclip.core.formatter import Formatter
@@ -65,11 +65,11 @@ class MonitorMixin:
     def _toggle_monitoring(self):
         if self.monitoring:
             self.monitoring = False
-            self.monitor_btn.configure(text="  모니터링 시작  ")
+            self.monitor_btn.configure(text="모니터링 시작")
             self._update_status("대기 중", False)
         else:
             self.monitoring = True
-            self.monitor_btn.configure(text="  모니터링 중지  ")
+            self.monitor_btn.configure(text="모니터링 중지")
             self._update_status("모니터링 중", True)
             self.last_clipboard = self._clipboard_read()
             self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -183,7 +183,7 @@ class MonitorMixin:
             self.chapter_combo['values'] = [str(c) for c in chapters]
             self.chapter_var.set(str(chapter))
             self._load_chapter(highlight_verses=verses if verses else None)
-            self.notebook.select(self.tab_viewer)
+            self._show_tab('viewer')
 
     def _append_log(self, text):
         self.log_text.configure(state=tk.NORMAL)
@@ -213,12 +213,14 @@ class MonitorMixin:
             self._update_viewer_from_ref(book_num, chapter, verses)
 
     def _update_status(self, text, active):
-        t = self.theme
-        self.status_label.configure(text=f" {text} ")
+        # CTk badge (top bar) — colors switch with appearance mode via tuples.
+        self.status_label.configure(text=text)
         if active:
-            self.status_label.configure(bg=t['status_bg'], fg=t['status_fg'])
+            self.status_label.configure(fg_color=CTK['status_on_bg'],
+                                        text_color=CTK['status_on_fg'])
         else:
-            self.status_label.configure(bg=t['status_off_bg'], fg=t['status_off_fg'])
+            self.status_label.configure(fg_color=CTK['status_off_bg'],
+                                        text_color=CTK['status_off_fg'])
 
     # ---- Theme ----
 

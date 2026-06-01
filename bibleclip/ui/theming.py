@@ -1,6 +1,7 @@
 """Dark/light toggle and widget theming."""
 import tkinter as tk
 from tkinter import ttk, messagebox
+import customtkinter as ctk
 import sqlite3
 import os
 import sys
@@ -65,8 +66,10 @@ class ThemeMixin:
     def _toggle_dark_mode(self):
         self.settings['dark_mode'] = not self.settings['dark_mode']
         self.theme = DARK_THEME if self.settings['dark_mode'] else LIGHT_THEME
+        # Switch CTk widgets (top bar, tabs) to the matching appearance.
+        ctk.set_appearance_mode('dark' if self.settings['dark_mode'] else 'light')
         self.dark_btn.configure(
-            text="  라이트 모드  " if self.settings['dark_mode'] else "  다크 모드  ")
+            text="라이트 모드" if self.settings['dark_mode'] else "다크 모드")
         self._apply_theme()
         self._save_settings()
 
@@ -96,17 +99,11 @@ class ThemeMixin:
             self.root.configure(bg=t['bg'])
         except (tk.TclError, ValueError):
             self.root.configure(fg_color=t['bg'])
-        self.main_frame.configure(bg=t['bg'])
-
-        # Top bar
-        self.top_bar.configure(bg=t['bg'])
-        self.title_label.configure(bg=t['bg'], fg=t['accent'])
-        self._style_button(self.monitor_btn)
-        self._style_button(self.dark_btn)
-        self._style_button(self.update_check_btn)
+        # main_frame, top_bar, title, monitor/dark/update buttons and the tab
+        # bar are CTk widgets — they re-skin automatically via appearance mode.
         self._update_status("모니터링 중" if self.monitoring else "대기 중", self.monitoring)
 
-        # Tabs
+        # Tab content frames remain tk
         self.tab_viewer.configure(bg=t['bg'])
         self.tab_settings.configure(bg=t['bg'])
 

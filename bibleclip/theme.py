@@ -41,3 +41,25 @@ DARK_THEME = {
     'preview_bg': '#141019', 'preview_fg': '#E6E3F0',
     'radio_bg': '#16131F', 'radio_fg': '#E8E5F2', 'radio_sel': '#221C34',
 }
+
+
+# CustomTkinter palette (Medium redesign). Each value is a (light, dark) tuple
+# so CTk widgets auto-switch with the appearance mode. Violet/indigo "pipeline"
+# palette: accent #6D4DFF (light) / #9A86FF (dark).
+CTK = {
+    'accent':        ('#6D4DFF', '#9A86FF'),
+    'accent_hover':  ('#5A3FE0', '#B3A4FF'),
+    'on_accent':     ('#FFFFFF', '#FFFFFF'),
+    'app_bg':        ('#F6F5FB', '#16131F'),
+    'card':          ('#FFFFFF', '#1C1828'),
+    'card_border':   ('#E7E4F2', '#2C2542'),
+    'text':          ('#1C1B2E', '#E8E5F2'),
+    'muted':         ('#6B6880', '#A99FC6'),
+    'btn':           ('#F0ECFA', '#251F38'),
+    'btn_hover':     ('#E2DAF6', '#322A4E'),
+    'btn_text':      ('#5A3FD0', '#C9C0EC'),
+    'status_on_bg':  ('#E7F6EC', '#1C2A20'),
+    'status_on_fg':  ('#2E8B57', '#7EE0A1'),
+    'status_off_bg': ('#FCEAEE', '#2E1F28'),
+    'status_off_fg': ('#C0395A', '#F2899F'),
+}

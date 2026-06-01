@@ -83,7 +83,7 @@ class SearchMixin:
             return
         results = self.bible_dbs[ver].search(keyword, limit=300)
         self._render_search_results(keyword, ver, results)
-        self.notebook.select(self.tab_viewer)
+        self._show_tab('viewer')
         if copy_first and results:
             b, c, v, _ = results[0]
             self._copy_single_ref(b, c, v)

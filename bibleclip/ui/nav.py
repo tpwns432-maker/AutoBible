@@ -66,7 +66,7 @@ class NavMixin:
         """Arrow-key chapter nav only on the viewer tab and not while a field
         (entry / combobox / listbox) has focus."""
         try:
-            if self.notebook.select() != str(self.tab_viewer):
+            if getattr(self, '_current_tab', 'viewer') != 'viewer':
                 return False
             w = self.root.focus_get()
             if isinstance(w, (tk.Entry, ttk.Combobox, tk.Listbox)):
