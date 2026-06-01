@@ -62,6 +62,18 @@ from bibleclip.core.formatter import Formatter
 
 
 class LexiconMixin:
+    def _on_main_activate(self, event=None):
+        """Main window came forward → the open dict popups are now behind it."""
+        if event is not None and event.widget is not self.root:
+            return
+        if getattr(self, '_closing_popup', False):
+            return
+        for p in getattr(self, '_lex_popups', []):
+            try:
+                p._above_main = False
+            except Exception:
+                pass
+
     def _render_lex_middle(self, our_bn, chapter):
         text = self.lex_mid_text
         self._lex_hl_code = None   # tags are recreated below; clear stale highlight
@@ -327,6 +339,14 @@ class LexiconMixin:
         render_dict_html(txt, body, fg=t['viewer_fg'], num_color=t['accent'])
 
         self._lex_popups.append(top)
+        # Track whether this popup is above or behind the main window. A popup
+        # starts above; clicking the main window pushes them behind; clicking a
+        # popup brings it above again.
+        top._above_main = True
+        top.bind('<Activate>', lambda e, w=top: setattr(w, '_above_main', True))
+        if not getattr(self, '_main_activate_bound', False):
+            self.root.bind('<Activate>', self._on_main_activate, add='+')
+            self._main_activate_bound = True
 
         def on_close():
             try:
@@ -339,20 +359,24 @@ class LexiconMixin:
                 self._lex_popups.remove(top)
             except ValueError:
                 pass
+            # Re-raise ONLY the popups that were above the main window; leave the
+            # ones the user pushed behind main where they are. Snapshot before
+            # destroy, and set a flag so the activation the close triggers on the
+            # main window doesn't wrongly mark everything as "behind".
+            above = [p for p in self._lex_popups if getattr(p, '_above_main', True)]
+            self._closing_popup = True
             top.destroy()
-            # Closing a child Toplevel activates the main window on Windows,
-            # which then hides the other popups behind it. Re-raise the
-            # remaining popups so they stay in front.
-            for p in self._lex_popups:
+            for p in above:
                 try:
                     p.lift()
                 except Exception:
                     pass
-            if self._lex_popups:
+            if above:
                 try:
-                    self._lex_popups[-1].focus_set()
+                    above[-1].focus_set()
                 except Exception:
                     pass
+            self.root.after(250, lambda: setattr(self, '_closing_popup', False))
 
         top.protocol("WM_DELETE_WINDOW", on_close)
         top.bind('<Escape>', lambda e: on_close())
