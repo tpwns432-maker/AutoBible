@@ -6,12 +6,20 @@ import `webview`, so it can be unit-tested headlessly against a plain Library.
 Events that originate in Python (caught clipboard references) are pushed to the
 front-end via the injected window's ``evaluate_js`` — still no `webview` import.
 """
+import os
+import sys
 import json
 import re
+import threading
+import tempfile
+import subprocess
 import webbrowser
 
-from bibleclip.config import __version__, RELEASES_PAGE_URL
+from bibleclip.config import __version__, RELEASES_PAGE_URL, IS_WINDOWS, get_base_dir
 from bibleclip.update import fetch_latest_release, parse_version
+from bibleclip.core.installer import (
+    download_file, stage_payload, write_windows_bat, write_mac_sh,
+)
 
 try:
     import pyperclip
@@ -137,6 +145,7 @@ class Api:
         self.lib = library
         self._window = None        # pywebview window, injected by webui.app.main()
         self._popup_factory = None  # callable(title, html) -> new native window
+        self._update = None        # last fetch_latest_release info (for install)
         self.monitoring = False
 
     def set_window(self, window):
@@ -263,6 +272,7 @@ class Api:
         info, error = fetch_latest_release()
         if error or not info:
             return {'ok': False, 'error': error or '응답 없음'}
+        self._update = info  # remembered for install_update()
         has = parse_version(info['version']) > parse_version(__version__)
         return {
             'ok': True, 'has_update': has,
@@ -282,6 +292,77 @@ class Api:
         self.lib.settings['skip_update_version'] = version
         self.lib.save_settings()
         return {'ok': True}
+
+    def install_update(self):
+        """Download the latest release and apply it in place (the desktop app's
+        self-update). Runs in a worker thread; progress/result are pushed to JS
+        as window.bibleclip.onUpdateProgress / onUpdateReady / onUpdateError.
+        Only works in a frozen build on Windows/macOS."""
+        if not getattr(sys, 'frozen', False):
+            return {'ok': False, 'error': '소스 실행 모드에서는 자동 설치가 안 됩니다. 릴리스 페이지를 이용하세요.'}
+        info = self._update
+        if not info or not info.get('download_url'):
+            return {'ok': False, 'error': '업데이트 정보가 없습니다. 먼저 업데이트 확인을 해주세요.'}
+        if not (IS_WINDOWS or sys.platform == 'darwin'):
+            return {'ok': False, 'error': '이 OS에서는 자동 설치가 지원되지 않습니다.'}
+        threading.Thread(target=self._run_install, args=(info,), daemon=True).start()
+        return {'ok': True, 'started': True}
+
+    def _run_install(self, info):
+        try:
+            tmp = tempfile.mkdtemp(prefix='bibleclip_update_')
+            zip_path = os.path.join(tmp, info.get('asset_name') or 'update.zip')
+
+            def prog(done, total):
+                pct = round(done * 100.0 / total, 1) if total else 0
+                self._push('onUpdateProgress', pct, done // 1024,
+                           (total // 1024) if total else 0)
+
+            download_file(info['download_url'], zip_path, prog)
+            self._push('onUpdateProgress', 100, 0, 0)
+
+            is_mac = sys.platform == 'darwin'
+            payload = 'BibleClipWeb.app' if is_mac else 'BibleClipWeb.exe'
+            src = stage_payload(zip_path, os.path.join(tmp, 'extract'), payload)
+
+            if is_mac:
+                sh = os.path.join(tmp, 'updater.sh')
+                write_mac_sh(sh, src, self._running_app_path(), os.getpid())
+                subprocess.Popen(['/bin/bash', sh], start_new_session=True, close_fds=True)
+            else:
+                bat = os.path.join(tmp, 'updater.bat')
+                write_windows_bat(bat, src, get_base_dir(), 'BibleClipWeb.exe')
+                flags = (subprocess.CREATE_NEW_PROCESS_GROUP
+                         | getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000))
+                subprocess.Popen(['cmd', '/c', bat], creationflags=flags, close_fds=True)
+
+            self._push('onUpdateReady')
+            self._quit_for_update()
+        except Exception as e:
+            self._push('onUpdateError', str(e))
+
+    def _running_app_path(self):
+        """Full path of the running .app bundle (macOS), for in-place replace."""
+        p = os.path.dirname(sys.executable)
+        while p and not p.endswith('.app'):
+            parent = os.path.dirname(p)
+            if parent == p:
+                return os.path.join(get_base_dir(), 'BibleClipWeb.app')
+            p = parent
+        return p
+
+    def _quit_for_update(self):
+        try:
+            self.lib.stop_monitoring()
+            self.lib.save_settings()
+        except Exception:
+            pass
+        try:
+            if self._window is not None:
+                self._window.destroy()
+        except Exception:
+            pass
+        os._exit(0)  # ensure the process exits so the updater can overwrite files
 
     def note_position(self, book, chapter):
         """Remember the last viewed book/chapter (saved to disk on window close

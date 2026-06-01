@@ -236,7 +236,9 @@ def main():
     assert api.check_update()['skipped'] is True
     apimod_local.fetch_latest_release = lambda timeout=8: (None, '네트워크 오류')
     assert api.check_update()['ok'] is False
-    print("check_update (stubbed) OK")
+    # install only runs in a frozen build → graceful refusal under source mode
+    assert api.install_update()['ok'] is False
+    print("check_update (stubbed) + install source-mode guard OK")
 
     monitor_check()
 

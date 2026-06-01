@@ -548,6 +548,28 @@
       $("update-banner").hidden = true;
     });
     if ($("ub-close")) $("ub-close").addEventListener("click", () => { $("update-banner").hidden = true; });
+    if ($("ub-install")) $("ub-install").addEventListener("click", async () => {
+      const r = await api().install_update();
+      if (!r || !r.ok) { toast(r && r.error ? r.error : "자동 설치를 시작할 수 없습니다"); return; }
+      $("ub-text").textContent = "업데이트 다운로드 준비 중…";
+      $("ub-install").disabled = true;
+    });
+  }
+
+  // Update progress/result pushed from Python during install_update().
+  function onUpdateProgress(pct, kb, total) {
+    const t = $("ub-text");
+    if (t) t.textContent = total ? `다운로드 중… ${pct}% (${kb.toLocaleString()} / ${total.toLocaleString()} KB)`
+                                 : `다운로드 중… ${kb.toLocaleString()} KB`;
+  }
+  function onUpdateReady() {
+    const t = $("ub-text");
+    if (t) t.textContent = "설치 적용 중… 앱이 곧 재시작됩니다.";
+  }
+  function onUpdateError(msg) {
+    toast("업데이트 실패: " + msg);
+    const b = $("ub-install");
+    if (b) b.disabled = false;
   }
 
   // ---- Clipboard monitoring ----
@@ -650,6 +672,9 @@
         showView("search");
         runSearch(keyword);
       },
+      onUpdateProgress,
+      onUpdateReady,
+      onUpdateError,
     };
   }
 
