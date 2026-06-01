@@ -1,7 +1,7 @@
 # BibleClip — 작업 인계 노트 (HANDOFF)
 
 > 대화를 `/clear` 한 뒤 다음 세션이 빠르게 이어받기 위한 문서.
-> 최종 업데이트: **v1.5.2 릴리스 직후** (2026-06-01).
+> 최종 업데이트: **v1.5.3 릴리스 준비** (2026-06-01) — 버전/CHANGELOG 반영 완료, 태그/푸시는 빌드 확인 후.
 
 ---
 
@@ -12,10 +12,13 @@
 
 ## 2. 현재 상태
 - **최신 릴리스: v1.5.2** (CI green, Windows zip + macOS zip + dmg 배포 완료).
+- **v1.5.3 릴리스 준비 중** — 브랜치 `feat/v1.5.3-settings-ctk`. 설정 탭 CTk화 + 사전 팝업
+  z-order 수정 완료, 버전/CHANGELOG 반영 완료. **아직 main 머지·태그·CI 배포 전.**
 - `main` 브랜치가 곧 배포본. 작업용 브랜치는 머지 후 삭제함.
-- 두 번의 큰 작업 완료:
+- 그동안의 큰 작업:
   - **v1.5.1** — 단일 파일 `autobible.py`(3,764줄)를 `bibleclip/` 패키지로 모듈화 + 네이밍 정리.
-  - **v1.5.2** — UI 현대화(리디자인 "Medium" 단계, CustomTkinter).
+  - **v1.5.2** — UI 현대화(리디자인 "Medium" 단계, CustomTkinter) — 설정 탭 제외.
+  - **v1.5.3** — 설정 탭도 CTk(세그먼트 버튼)로 통일 + 사전 팝업 z-order를 Win32 조회로 재구현.
 
 ## 3. 구조 (모듈화 후)
 ```
@@ -50,10 +53,18 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - 버전 칩 줄 = 카드, 칩 드래그는 place 기반 **라이브 reorder + 트윈 애니메이션**(좌우 대칭 중간점 기준).
 - 팔레트: 보라/인디고 (accent `#6D4DFF`/`#9A86FF`). 라이트/다크는 `ctk.set_appearance_mode` + (light,dark) 튜플로 자동 전환.
 
+**완료 (v1.5.3):**
+- [x] **설정(출력 설정) 탭 CTk화** — viewer와 동일한 카드 레이아웃. 표기 설정 라디오 그룹 7개를
+  `CTkSegmentedButton`으로(값 매핑은 `settings_tab.py` `_seg_row`의 (value,label) 튜플), 우측은
+  `CTkScrollableFrame`(단, `PanedWindow`에 직접 못 넣어 tk.Frame 홀더로 감쌈). `StringVar`/`BooleanVar`
+  배선 유지로 `order.py` 콜백은 무수정. `theming.py` settings 구간 축소 + 세그먼트 선택색 재적용.
+- [x] **사전 팝업 z-order** — `lexicon.py`에서 Windows는 닫는 시점에 `EnumWindows`로 실제 z-order를 읽어
+  (destroy 전) 메인보다 앞이던 팝업만 재부상. 비-Windows는 기존 `<Activate>` 방식 fallback.
+
 **남은 일 (다음 버전 후보):**
-- [ ] **설정(출력 설정) 탭이 아직 옛 tk 스타일** → CTk로 통일 (v1.5.3 1순위). `ui/settings_tab.py`, `ui/order.py`, `theming.py`의 settings 구간.
-- [ ] **사전 팝업 z-order**: 여러 사전창 중 하나 닫을 때 "메인 뒤로 숨긴 창은 안 올라오게" — 현재 `<Activate>` 이벤트 추적(`lexicon.py` `_on_main_activate`)이 환경에 따라 불안정. **Win32 z-order 조회**로 다시 잡는 게 정석. (비치명적이라 보류 중)
 - [ ] 드롭다운 팝업 위치 미세조정(이미 화면 아래면 위로 flip함).
+- [ ] (참고) 세그먼트 버튼 텍스트색은 CTk가 상태별 분리를 못 해 `_restyle_segmented`로 직접 칠함 —
+  `_apply_theme`에서 `_settings_segs`/`tab_bar`/`lex_lang_seg`를 다시 칠하도록 해둠.
 
 ## 5. 빌드 / 릴리스 절차
 1. 작업용 브랜치에서 진행, **단계마다 커밋**.
