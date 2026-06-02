@@ -196,4 +196,25 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 - ◐ **업데이트 인앱 설치**(구현·메커니즘 검증 완료; E2E는 실 릴리스 필요): 신규 `core/installer.py`(UI 비의존: `download_file`/`stage_payload`/`write_windows_bat`/`write_mac_sh`). `api.install_update()`가 워커 스레드에서 다운로드(진행률→`onUpdateProgress`)→압축해제→updater.bat(robocopy 교체)/sh 생성·spawn→`_quit_for_update`(window.destroy+os._exit). 배너에 "지금 업데이트" 버튼(소스모드/비지원 OS는 graceful 거부→토스트). **`tests/test_installer.py`로 .bat이 실제 디렉터리를 스왑하는 것까지 로컬 검증**(whoami.exe를 더미 페이로드로). 끝까지(다운로드→교체→재시작)는 실제 웹 릴리스 zip이 있어야 검증 가능.
 - **남은 5 항목**: ⬜ macOS 웹 빌드(`web:web`, .app)·코드서명 · ⬜ 실제 웹 릴리스 만들어 인앱 설치 E2E 검증(베타 태그/릴리스 or 로컬 http 서버로 자산 흉내).
 
-**병행 전략 현황:** main=CTk v1.5.3 배포 중. 웹은 `feat/web-engine-facade`(미머지, 다수 커밋). 기능 동등+패키징 안정 시 전환 결정.
+**전환 완료:** **v1.5.4부터 main=웹(pywebview) 앱**. CTk(`bibleclip_app.py`+`bibleclip/ui/`)는 코드만 잔존, 빌드·배포 안 함. 앱 본체=`bibleclip_web.py`+`bibleclip/webui/`+`web/`. CI(build.yml)는 웹을 `BibleClipWeb-*`로 빌드/릴리스. macOS 웹 빌드도 CI 추가·검증됨. `사용법.txt`(루트)는 릴리스 zip에 자동 동봉. 소개 슬라이드 `docs/소개.html`.
+
+---
+
+## 10. 다음 작업 (예정 패치) — v1.5.5 후보
+세이브 지점(2026-06-02): v1.5.4 웹 전환 릴리스 완료. 다음 세션에서 아래 3건 진행 예정.
+
+1. **검색 역본 선택** — `#검색`(키워드 검색)에 쓸 성경 버전을 사용자가 고르게.
+   현재 `webui/api.py:search()`는 `_search_version()`(primary/한국어)로 고정. 검색 뷰(`web/index.html` `#search-view`, `app.js` `runSearch/renderSearch`)에 역본 선택 드롭다운/칩 추가 → `search(keyword, version)`에 전달. (기본값은 현재 보던 primary.)
+
+2. **설정 창 구현** — 좌측 레일 맨 아래 **톱니(설정) 아이콘이 현재 死버튼**(`index.html`의 마지막 `.nav-icon` "설정", id 없음·핸들러 없음). 누르면 뜰 **앱 설정** 창/패널을 만들 것. 담을 후보:
+   - 시작 시 자동 업데이트 확인 on/off(`auto_update_check` 이미 settings에 있음)
+   - 사전 기본 언어(한/영) 기본값
+   - 클립보드 폴링 간격(현재 `ClipboardMonitor.POLL_INTERVAL=0.5`)
+   - 검색 결과 클릭 시 본문 이동 토글(아래 3번)
+   - 정보(버전/깃허브 링크), 설정 초기화, 데이터 폴더 열기 등
+   - (출력 설정 탭과는 구분 — 이건 "앱 전반" 설정)
+   ※ 출력설정은 이미 sliders 아이콘(`#nav-settings`)에 있음. 이건 별개의 gear.
+
+3. **검색 결과 클릭 시 본문 이동 토글** — 현재 검색 결과 클릭은 **복사만** 함(`app.js` renderSearch의 `.sr` click → `copy_reference`+토스트). 옵션을 켜면 복사 + 해당 구절로 **본문 뷰 이동**(`showView('viewer')`+`goToRef`)까지. 설정값은 새 키(예 `search_click_navigates`)로 저장(2번 설정 창에 토글 노출).
+
+재개 시: 이 파일 + `메모리(bibleclip-project-status)` 읽고 시작. 헤드리스 테스트 3종(`tests/test_webui_api.py`, `test_installer.py`, `test_core.py`)으로 회귀 확인. 커밋 전 `web/app.js` NUL 점검.

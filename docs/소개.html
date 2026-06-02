@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BibleClip — 소개</title>
+<style>
+/* ===== Palette: BibleClip 다크 테마 그대로 ===== */
+:root{
+  --accent:#6D4DFF; --accent2:#5B7CFA; --grad:linear-gradient(135deg,#6D4DFF,#5B7CFA);
+  --atext:#9A86FF; --on:#fff;
+  --bg:#0F0B1A; --card:#171127; --card2:#1D1633; --border:#2A2140;
+  --text:#ECE9F5; --muted:#A99FC6; --dim:#7D7399; --hair:#241C3A;
+  --rail:#1A1330; --strongbg:#241A3F; --strongfg:#B9AEF0; --chipbg:#241A3F;
+  --heb:#ECE9F5; --okbg:#14301C; --okfg:#7FD08B; --okdot:#46C160;
+  --font:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Segoe UI","Noto Sans KR",system-ui,sans-serif;
+  --fheb:"SBL Hebrew","Times New Roman","Noto Serif Hebrew",serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font); background:var(--bg); color:var(--text);
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+/* atmospheric glows */
+body::before,body::after{content:"";position:fixed;border-radius:50%;filter:blur(90px);opacity:.5;z-index:0;pointer-events:none}
+body::before{width:560px;height:560px;background:radial-gradient(circle,#6D4DFF55,transparent 70%);top:-180px;right:-120px}
+body::after{width:520px;height:520px;background:radial-gradient(circle,#5B7CFA40,transparent 70%);bottom:-200px;left:-140px}
+
+/* ===== Deck ===== */
+.deck{position:relative;height:100vh;width:100vw;z-index:1}
+.slide{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  padding:6vh 8vw; opacity:0; visibility:hidden;
+  transform:translateY(18px) scale(.99); transition:opacity .5s ease, transform .5s ease;
+}
+.slide.active{opacity:1;visibility:visible;transform:none}
+.kicker{color:var(--atext);font-weight:800;font-size:13px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px}
+h1{font-size:clamp(34px,5.2vw,68px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+h2{font-size:clamp(26px,3.6vw,46px);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:8px}
+.lead{color:var(--muted);font-size:clamp(15px,1.7vw,20px);line-height:1.7;max-width:46ch;margin-top:14px}
+.grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* layout helpers */
+.split{display:grid;grid-template-columns:1fr 1.15fr;gap:5vw;align-items:center;height:100%}
+.center{align-items:center;text-align:center}
+.center .lead{margin-left:auto;margin-right:auto}
+
+/* ===== UI mock building blocks (앱 모양 재현) ===== */
+.app{
+  display:flex; background:var(--bg); border:1px solid var(--border); border-radius:18px;
+  overflow:hidden; box-shadow:0 40px 90px -40px #000a, 0 0 0 1px #ffffff08;
+  height:min(62vh,520px);
+}
+.rail{width:54px;flex:0 0 54px;background:var(--rail);display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px}
+.logo{width:30px;height:30px;border-radius:9px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;margin-bottom:10px;box-shadow:0 8px 18px -8px #6D4DFFb0}
+.ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#9D92C4;font-size:15px}
+.ic.on{background:#ffffff14;color:#fff}
+.ic.moon-on{color:#FFD66B}
+.ic .spacer{flex:1}
+.rail .sp{flex:1}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:9px;padding:11px 14px 8px}
+.brand{font-weight:800;font-size:13px}
+.vpill{font-size:9px;font-weight:700;color:var(--dim);background:var(--card2);padding:2px 7px;border-radius:999px}
+.sp{flex:1}
+.btn{font-size:10.5px;font-weight:700;padding:6px 11px;border-radius:9px;border:1px solid var(--border);background:var(--card2);color:#CFC9E4}
+.btn.pri{border:none;color:#fff;background:var(--grad);box-shadow:0 8px 18px -8px #6D4DFF99}
+.badge{font-size:9.5px;font-weight:700;padding:5px 9px;border-radius:999px;background:var(--card2);color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--dim)}
+.badge.on{background:var(--okbg);color:var(--okfg)}
+.badge.on::before{background:var(--okdot);box-shadow:0 0 0 3px #46C16033}
+.ctrls{display:flex;align-items:center;gap:7px;padding:0 14px 10px;flex-wrap:wrap}
+.chip{border:1px solid var(--border);background:var(--card2);color:#CFC9E4;border-radius:9px;padding:5px 10px;font-size:10.5px;font-weight:700}
+.chip.sel{border-color:var(--accent);color:var(--atext);background:#241A3F}
+.chip.sel.pri::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle}
+.chip.add{border-style:dashed;color:var(--dim)}
+.chip.dd::after{content:" ▾";color:var(--dim)}
+.mini{width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.panels{flex:1;display:grid;grid-template-columns:1.05fr 1.05fr 1fr;gap:10px;padding:0 14px 14px;min-height:0}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:13px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.phead{font-size:9px;font-weight:800;letter-spacing:.06em;color:var(--dim);padding:11px 13px 5px;text-transform:uppercase}
+.pbody{padding:2px 13px 12px;overflow:hidden;flex:1;font-size:11.5px;line-height:1.7}
+.v{margin-bottom:8px;color:var(--text)}
+.vn{color:var(--atext);font-weight:800;font-size:.72em;vertical-align:super;margin-right:3px}
+.vver{display:inline-block;font-size:8.5px;font-weight:800;color:var(--atext);background:var(--chipbg);border-radius:6px;padding:1px 6px;margin-right:5px}
+.vline{display:block;margin-bottom:3px}
+.sn{display:inline-block;font-size:8.5px;font-weight:800;color:var(--strongfg);background:var(--strongbg);border-radius:5px;padding:1px 4px;margin:0 1px;vertical-align:middle}
+.lexchip{display:inline-block;font-size:9.5px;font-weight:800;color:var(--atext);background:var(--chipbg);border-radius:7px;padding:2px 9px;margin-bottom:8px}
+.heb{font-family:var(--fheb);font-size:40px;line-height:1.1;color:var(--heb)}
+.rom{color:var(--atext);font-weight:800;font-size:13px;margin-left:8px}
+.lexbody{color:var(--muted);font-size:11px;line-height:1.7;margin-top:8px}
+
+/* callouts (번호 설명) */
+.callouts{margin-top:22px;display:flex;flex-direction:column;gap:12px}
+.callout{display:flex;gap:12px;align-items:flex-start}
+.num{flex:0 0 26px;width:26px;height:26px;border-radius:8px;background:var(--card2);border:1px solid var(--border);color:var(--atext);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+.callout b{font-weight:700}
+.callout p{color:var(--muted);font-size:13.5px;line-height:1.55}
+.callout p b{color:var(--text)}
+
+/* feature grid */
+.fgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:26px;max-width:760px}
+.fcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 18px}
+.fcard .fi{width:34px;height:34px;border-radius:10px;background:#241A3F;display:flex;align-items:center;justify-content:center;font-size:17px;margin-bottom:10px}
+.fcard h3{font-size:15px;font-weight:800;margin-bottom:5px}
+.fcard p{color:var(--muted);font-size:12.5px;line-height:1.6}
+
+/* toast + tooltip mock */
+.toast{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#241D33;font-weight:700;font-size:12px;padding:9px 15px;border-radius:999px;box-shadow:0 18px 40px -14px #000a}
+.toast::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--okdot)}
+.tip{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 13px;box-shadow:0 16px 40px -14px #000b;display:inline-block}
+.tip .th{font-family:var(--fheb);font-size:26px;color:var(--heb)}
+.tip .tr{color:var(--atext);font-weight:800;font-size:12px;margin-left:6px}
+.tip .tc{color:var(--atext);font-size:10px;font-weight:700;margin-top:4px}
+.tip .tg{color:var(--muted);font-size:11px;margin-top:2px}
+
+/* clipboard before/after */
+.flow{display:flex;align-items:center;gap:22px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.note{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;min-width:230px;box-shadow:0 24px 60px -30px #000}
+.note .lbl{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.note .clip{font-size:18px;font-weight:700;color:var(--text)}
+.note.out .clip{font-size:14px;font-weight:500;color:var(--muted);line-height:1.6}
+.note .src{font-size:11px;color:var(--dim);margin-top:8px}
+.arrow{font-size:30px;color:var(--atext)}
+.kbd{font-family:var(--font);font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--border);background:var(--card2);border-radius:6px;padding:2px 7px}
+
+/* settings preview mock */
+.setrow{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.setlbl{font-size:11px;color:var(--muted);width:64px;flex:0 0 64px}
+.seg{display:inline-flex;background:var(--card2);border-radius:9px;padding:3px;gap:2px}
+.seg .o{font-size:10px;font-weight:700;color:var(--muted);padding:4px 9px;border-radius:6px}
+.seg .o.on{background:var(--accent);color:#fff}
+.prev{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--muted);font-size:11.5px;line-height:1.7;margin-top:10px}
+.prev b{color:var(--atext)}
+/* output-settings detail */
+.setcard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.setcard .ct{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:10px}
+.setrow.tight{margin-bottom:7px}
+.setrow.tight .setlbl{width:58px;flex:0 0 58px;font-size:10.5px}
+.seg.sm .o{font-size:9.5px;padding:3px 8px}
+.sw{position:relative;width:32px;height:19px;border-radius:999px;background:var(--card2);flex:0 0 auto}
+.sw.on{background:var(--accent)}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:13px;height:13px;border-radius:50%;background:#fff;transition:.15s}
+.sw.on::after{left:16px}
+.swrow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--hair)}
+.swrow span{font-size:11px;color:var(--text)}
+.orow{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--border);border-radius:9px;margin-bottom:5px}
+.orow .oi{font-size:10px;font-weight:800;color:var(--atext);width:13px}
+.orow .onm{flex:1;font-size:11.5px;font-weight:700}
+.orow .onm small{color:var(--dim);font-weight:500;margin-left:6px}
+.orow .ob{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);background:var(--card2);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.oadd{margin-top:3px;font-size:10.5px;font-weight:700;color:var(--dim);border:1px dashed var(--border);border-radius:9px;padding:6px 11px;display:inline-block}
+.vary{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:7px}
+.vary .vt{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--atext);margin-bottom:3px}
+.vary .vc{font-size:11.5px;color:var(--text);line-height:1.5}
+
+/* search mock */
+.sbar{display:flex;gap:8px;margin-bottom:10px}
+.sin{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--muted);font-size:12px}
+.sr{padding:8px 11px;border-radius:9px;border:1px solid transparent;margin-bottom:6px}
+.sr:hover{background:#241A3F}
+.srr{font-size:11px;font-weight:800;color:var(--atext);margin-right:8px}
+.srt{font-size:12px;color:var(--text)}
+
+/* ===== nav ===== */
+.bar{position:fixed;top:0;left:0;height:3px;background:var(--grad);z-index:5;transition:width .4s ease}
+.dots{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:9px;z-index:5}
+.dot{width:8px;height:8px;border-radius:50%;background:#ffffff22;cursor:pointer;transition:.2s}
+.dot.on{background:var(--atext);width:22px;border-radius:5px}
+.nav{position:fixed;bottom:18px;right:24px;display:flex;gap:8px;z-index:5}
+.nav button{width:38px;height:38px;border-radius:11px;border:1px solid var(--border);background:#171127cc;color:var(--text);font-size:16px;cursor:pointer;backdrop-filter:blur(6px);transition:.15s}
+.nav button:hover{border-color:var(--accent);color:var(--atext)}
+.count{position:fixed;bottom:26px;left:24px;color:var(--dim);font-size:12px;font-weight:700;z-index:5}
+.hint{position:fixed;top:18px;right:22px;color:var(--dim);font-size:11px;z-index:5}
+@media (max-width:760px){.split{grid-template-columns:1fr;gap:24px}.app{height:42vh}.fgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 1. HERO -->
+  <section class="slide center active">
+    <div style="display:flex;flex-direction:column;align-items:center">
+      <div class="logo" style="width:64px;height:64px;border-radius:18px;font-size:34px;margin-bottom:22px">B</div>
+      <div class="kicker">한국어 성경 클립보드 앱</div>
+      <h1>복사하면, <span class="grad-text">성경이 됩니다.</span></h1>
+      <p class="lead">구절 표기를 복사하기만 하면 BibleClip이 자동으로 알아보고,
+        내가 정한 형식의 본문으로 바꿔 다시 클립보드에 담아 줍니다.
+        설교·문서·메신저 어디에나 바로 붙여넣기.</p>
+      <div style="margin-top:26px;display:flex;gap:10px;align-items:center">
+        <span class="badge on">v1.5.4</span>
+        <span class="vpill" style="font-size:11px;padding:5px 11px">Windows · macOS</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. CORE IDEA -->
+  <section class="slide center">
+    <div class="kicker">핵심 아이디어</div>
+    <h2>그냥 <span class="grad-text">복사</span>만 하세요</h2>
+    <p class="lead">모니터링을 켜 두면, 다른 어떤 앱에서든 구절을 복사하는 순간
+      변환이 일어납니다.</p>
+    <div class="flow">
+      <div class="note">
+        <div class="lbl">복사한 것</div>
+        <div class="clip">요 3:16</div>
+        <div class="src">메모장 · 카톡 · 한글 어디서나</div>
+      </div>
+      <div class="arrow">→</div>
+      <div class="note out">
+        <div class="lbl">클립보드에 담기는 것</div>
+        <div class="clip">하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니… <b style="color:var(--atext)">(요 3:16)</b></div>
+        <div class="src">이제 <span class="kbd">Ctrl</span> <span class="kbd">V</span> 로 붙여넣기</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. OVERVIEW -->
+  <section class="slide">
+    <div class="kicker">한눈에 보기</div>
+    <h2>익숙하고 깔끔한 화면</h2>
+    <div class="split" style="margin-top:18px">
+      <div class="callouts">
+        <div class="callout"><div class="num">1</div><p><b>좌측 레일</b> — 성경 보기 · 출력 설정 · 검색 · 클립보드 로그를 한 번에 전환</p></div>
+        <div class="callout"><div class="num">2</div><p><b>상단바</b> — <b>모니터링 시작/중지</b>와 상태 배지, 업데이트 확인</p></div>
+        <div class="callout"><div class="num">3</div><p><b>본문 · 원어 · 사전</b> — 카드형 3분할로 한 화면에서 같이 봅니다</p></div>
+        <div class="callout"><div class="num">4</div><p><b>역본 칩 · 책/장</b> — 보고 싶은 역본과 위치를 빠르게 선택</p></div>
+      </div>
+      <div class="app">
+        <div class="rail">
+          <div class="logo">B</div>
+          <div class="ic on">▤</div><div class="ic">⚙</div><div class="ic">⌕</div><div class="ic">▢</div>
+          <div class="sp"></div><div class="ic moon-on">☾</div>
+        </div>
+        <div class="main">
+          <div class="top"><span class="brand">BibleClip</span><span class="vpill">v1.5.4</span><span class="sp"></span><span class="btn pri">모니터링 시작</span><span class="badge">대기 중</span></div>
+          <div class="ctrls"><span class="chip sel pri">KRV</span><span class="chip add">＋</span><span class="chip dd">요한복음</span><span class="chip dd">3장</span><span class="mini">‹</span><span class="mini">›</span></div>
+          <div class="panels">
+            <div class="pcard"><div class="phead">성경 본문</div><div class="pbody">
+              <div class="v"><span class="vn">16</span>하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니</div>
+              <div class="v"><span class="vn">17</span>하나님이 그 아들을 세상에 보내신 것은</div></div></div>
+            <div class="pcard"><div class="phead">원어 · 단어 클릭</div><div class="pbody">
+              <div class="v"><span class="vn">16</span>하나님이<span class="sn">G2316</span> 세상<span class="sn">G2889</span> 사랑<span class="sn">G25</span></div></div></div>
+            <div class="pcard"><div class="phead">사전</div><div class="pbody">
+              <span class="lexchip">G25</span><div><span class="heb" style="font-size:30px">ἀγαπάω</span><span class="rom">아가파오</span></div>
+              <div class="lexbody">사랑하다 — 의지적·헌신적 사랑을…</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. MONITORING -->
+  <section class="slide">
+    <div class="kicker">기능 ①</div>
+    <h2>클립보드 모니터링</h2>
+    <div class="split" style="margin-top:18px">
+      <div>
+        <p class="lead">[모니터링 시작]을 누르면 배지가 <b style="color:var(--okfg)">초록색</b>으로 바뀌고
+          감시가 시작됩니다. 인식한 구절은 자동 변환·복사되고, 본문이 그 구절로
+          이동하며 하이라이트됩니다.</p>
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+          <span class="badge on">모니터링 중</span>
+          <span class="toast">요 3:16 변환·복사됨</span>
+        </div>
+        <p class="lead" style="margin-top:20px">좌측 <b>클립보드 로그</b>에 인식한 구절이 쌓이고,
+          클릭하면 다시 이동·복사됩니다. <b>#키워드</b>를 복사하면 검색으로 이어집니다.</p>
+      </div>
+      <div class="app">
+        <div class="rail"><div class="logo">B</div><div class="ic on">▤</div><div class="ic">⚙</div><div class="ic">⌕</div><div class="ic" style="position:relative">▢<span style="position:absolute;top:5px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--rail)"></span></div><div class="sp"></div><div class="ic moon-on">☾</div></div>
+        <div class="main">
+          <div class="top"><span class="brand">BibleClip</span><span class="sp"></span><span class="btn pri">모니터링 중지</span><span class="badge on">모니터링 중</span></div>
+          <div class="ctrls"><span class="chip sel pri">KRV</span><span class="chip add">＋</span><span class="chip dd">요한복음</span><span class="chip dd">3장</span></div>
+          <div class="panels" style="grid-template-columns:1fr">
+            <div class="pcard"><div class="phead">성경 본문 · 요한복음 3</div><div class="pbody">
+              <div class="v" style="background:#241A3F;border-radius:8px;box-shadow:inset 3px 0 0 var(--accent);padding:5px 8px;margin:-3px -2px 8px"><span class="vn">16</span>하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니 이는 저를 믿는 자마다 멸망치 않고 영생을 얻게 하려 하심이라</div>
+              <div class="v"><span class="vn">17</span>하나님이 그 아들을 세상에 보내신 것은 세상을 심판하려 하심이 아니요</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. MULTI-VERSION -->
+  <section class="slide">
+    <div class="kicker">기능 ②</div>
+    <h2>여러 역본 나란히</h2>
+    <div class="split" style="margin-top:18px">
+      <div>
+        <p class="lead"><b>＋</b> 버튼으로 보고 싶은 역본을 여러 개 고르면 절마다
+          역본별로 나란히 표시됩니다. 칩을 <b>드래그</b>해 순서를 바꾸면 본문
+          순서도 부드럽게 따라옵니다.</p>
+        <div style="margin-top:18px;display:flex;gap:7px;flex-wrap:wrap">
+          <span class="chip sel pri">KRV</span><span class="chip sel">ESV</span><span class="chip sel">NKJV</span><span class="chip add">＋</span>
+        </div>
+      </div>
+      <div class="app">
+        <div class="rail"><div class="logo">B</div><div class="ic on">▤</div><div class="ic">⚙</div><div class="ic">⌕</div><div class="ic">▢</div><div class="sp"></div><div class="ic moon-on">☾</div></div>
+        <div class="main">
+          <div class="top"><span class="brand">BibleClip</span><span class="sp"></span><span class="btn pri">모니터링 시작</span><span class="badge">대기 중</span></div>
+          <div class="ctrls"><span class="chip sel pri">KRV</span><span class="chip sel">ESV</span><span class="chip sel">NKJV</span><span class="chip add">＋</span><span class="chip dd">창세기</span><span class="chip dd">1장</span></div>
+          <div class="panels" style="grid-template-columns:1fr">
+            <div class="pcard"><div class="phead">성경 본문 · 창세기 1</div><div class="pbody">
+              <div class="v"><span class="vn">1</span>
+                <span class="vline"><span class="vver">KRV</span>태초에 하나님이 천지를 창조하시니라</span>
+                <span class="vline"><span class="vver">ESV</span>In the beginning, God created the heavens and the earth.</span>
+                <span class="vline"><span class="vver">NKJV</span>In the beginning God created the heavens and the earth.</span>
+              </div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. ORIGINAL LANGUAGE -->
+  <section class="slide">
+    <div class="kicker">기능 ③</div>
+    <h2>원어와 사전, 깊이 있게</h2>
+    <div class="split" style="margin-top:18px">
+      <div>
+        <p class="lead">원어 패널의 <span class="sn">스트롱 번호</span>를 클릭하면 사전에 히브리어/헬라어
+          <b>원어가 큰 글씨</b>로, 음역과 뜻풀이와 함께 나옵니다.</p>
+        <div class="callouts" style="margin-top:18px">
+          <div class="callout"><div class="num">∙</div><p>단어에 <b>마우스를 올리면</b> 미리보기 풍선</p></div>
+          <div class="callout"><div class="num">∙</div><p>단어를 <b>우클릭</b>하면 사전이 <b>새 창</b>으로</p></div>
+          <div class="callout"><div class="num">∙</div><p><b>한글 / 영어</b> 사전 전환</p></div>
+        </div>
+        <div class="tip" style="margin-top:18px">
+          <div><span class="th">רֵאשִׁית</span><span class="tr">레쉬트</span></div>
+          <div class="tc">[H7225]</div>
+          <div class="tg">명사 · 첫째, 처음, 시작, 최상의 것</div>
+        </div>
+      </div>
+      <div class="app">
+        <div class="rail"><div class="logo">B</div><div class="ic on">▤</div><div class="ic">⚙</div><div class="ic">⌕</div><div class="ic">▢</div><div class="sp"></div><div class="ic moon-on">☾</div></div>
+        <div class="main">
+          <div class="top"><span class="brand">BibleClip</span><span class="sp"></span><span class="seg"><span class="o on">한글</span><span class="o">영어</span></span></div>
+          <div class="panels" style="grid-template-columns:1fr 1fr">
+            <div class="pcard"><div class="phead">원어 · 단어 클릭</div><div class="pbody">
+              <div class="v"><span class="vn">1</span>태초에<span class="sn" style="outline:2px solid var(--accent)">H7225</span> 하나님이<span class="sn">H430</span> 천지를<span class="sn">H8064</span> 창조<span class="sn">H1254</span></div></div></div>
+            <div class="pcard"><div class="phead">사전</div><div class="pbody">
+              <span class="lexchip">H7225</span>
+              <div><span class="heb">רֵאשִׁית</span><span class="rom">레쉬트 · reshith</span></div>
+              <div class="lexbody">로쉬(H7218)에서 유래. '첫째, 처음, 최초, 시작, 최상의 것'을 의미하며, 구약에서 50회 나타난다…</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. SEARCH -->
+  <section class="slide">
+    <div class="kicker">기능 ④</div>
+    <h2>찾고, 클릭하면 복사</h2>
+    <div class="split" style="margin-top:18px">
+      <div class="app" style="height:min(54vh,440px)">
+        <div class="rail"><div class="logo">B</div><div class="ic">▤</div><div class="ic">⚙</div><div class="ic on">⌕</div><div class="ic">▢</div><div class="sp"></div><div class="ic moon-on">☾</div></div>
+        <div class="main"><div class="top"><span class="brand">검색</span></div>
+          <div style="padding:0 14px 14px">
+            <div class="sbar"><span class="sin">사랑</span><span class="btn pri">검색</span></div>
+            <div style="font-size:10px;color:var(--dim);margin-bottom:8px">"사랑" 결과 312건 · KRV — 구절 클릭 시 복사</div>
+            <div class="sr"><span class="srr">요 3:16</span><span class="srt">하나님이 세상을 이처럼 사랑하사…</span></div>
+            <div class="sr"><span class="srr">고전 13:4</span><span class="srt">사랑은 오래 참고 사랑은 온유하며…</span></div>
+            <div class="sr"><span class="srr">요일 4:8</span><span class="srt">사랑하지 아니하는 자는 하나님을…</span></div>
+            <div class="sr"><span class="srr">롬 8:39</span><span class="srt">우리 주 그리스도 예수 안에 있는 하나님의 사랑에서…</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p class="lead">키워드를 입력해 성경 전체를 검색하고, 결과 구절을 <b>클릭하면 바로 복사</b>됩니다.</p>
+        <div class="callouts" style="margin-top:18px">
+          <div class="callout"><div class="num">∙</div><p>좌측 레일의 <b>돋보기</b>로 검색 화면 열기</p></div>
+          <div class="callout"><div class="num">∙</div><p>모니터링 중 다른 앱에서 <b>#사랑</b> 처럼 복사 → <b>자동 검색</b></p></div>
+          <div class="callout"><div class="num">∙</div><p>띄어쓰기·오타에도 유연하게 매칭</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. OUTPUT (detailed) -->
+  <section class="slide">
+    <div class="kicker">기능 ⑤</div>
+    <h2>복사 형식, 내 마음대로</h2>
+    <p class="lead" style="max-width:64ch">복사될 본문의 <b>모든 부분</b>을 설정할 수 있습니다. 무엇을 바꾸든
+      미리보기가 <b>실제 복사될 모습</b>으로 즉시 갱신돼요.</p>
+    <div class="split" style="margin-top:16px;grid-template-columns:1fr 1fr;gap:3vw;align-items:start">
+      <!-- 좌: 표기 설정 -->
+      <div class="setcard">
+        <div class="ct">표기 설정 (한국어 역본)</div>
+        <div class="setrow tight"><span class="setlbl">책 이름</span><span class="seg sm"><span class="o on">한글 약칭</span><span class="o">정식</span><span class="o">영문</span></span></div>
+        <div class="setrow tight"><span class="setlbl">장절 표기</span><span class="seg sm"><span class="o on">1:1</span><span class="o">1장 1절</span></span></div>
+        <div class="setrow tight"><span class="setlbl">괄호</span><span class="seg sm"><span class="o">없음</span><span class="o on">[ ]</span><span class="o">( )</span></span></div>
+        <div class="setrow tight"><span class="setlbl">표기 위치</span><span class="seg sm"><span class="o on">본문 앞</span><span class="o">본문 뒤</span></span></div>
+        <div class="setrow tight"><span class="setlbl">범위 기호</span><span class="seg sm"><span class="o on">-</span><span class="o">~</span></span></div>
+        <div class="setrow tight"><span class="setlbl">구분 기호</span><span class="seg sm"><span class="o">하이픈</span><span class="o">콜론</span><span class="o on">띄어쓰기</span></span></div>
+        <div class="setrow tight"><span class="setlbl">출력 방식</span><span class="seg sm"><span class="o on">한 줄로</span><span class="o">줄마다</span></span></div>
+        <div class="swrow"><span>버전 헤더 출력</span><span class="sw on"></span></div>
+        <div class="swrow"><span>장절 표기 숨기기 (본문만)</span><span class="sw"></span></div>
+      </div>
+      <!-- 우: 출력 순서 + 미리보기 + 형식 비교 -->
+      <div>
+        <div class="setcard">
+          <div class="ct">출력 순서 · 복사에 사용할 역본</div>
+          <div class="orow"><span class="oi">1</span><span class="onm">KRV<small>개역한글</small></span><span class="ob">↑</span><span class="ob">↓</span><span class="ob">✕</span></div>
+          <div class="orow"><span class="oi">2</span><span class="onm">ESV<small>English Standard</small></span><span class="ob">↑</span><span class="ob">↓</span><span class="ob">✕</span></div>
+          <span class="oadd">＋ 역본 추가</span>
+          <div class="prev" style="margin-top:13px">[요 1:1] 태초에 말씀이 계시니라…<br>In the beginning was the Word…</div>
+        </div>
+        <div style="margin-top:14px">
+          <div class="ct" style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:9px">같은 구절, 다른 형식</div>
+          <div class="vary"><div class="vt">한글 약칭 · 콜론 · 본문 뒤</div><div class="vc">태초에 말씀이 계시니라… (요 1:1)</div></div>
+          <div class="vary"><div class="vt">정식 · 괄호[ ] · 본문 앞</div><div class="vc">[요한복음 1:1] 태초에 말씀이 계시니라…</div></div>
+          <div class="vary"><div class="vt">줄마다 · 장:절 표시</div><div class="vc">요 1:1 태초에 말씀이 계시니라<br>요 1:2 그가 태초에 하나님과 함께…</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. POLISH -->
+  <section class="slide">
+    <div class="kicker">디테일</div>
+    <h2>오래 쓰기 좋게</h2>
+    <div class="fgrid">
+      <div class="fcard"><div class="fi">🌙</div><h3>라이트 / 다크</h3><p>달 아이콘으로 전환. 눈이 편한 다크 테마.</p></div>
+      <div class="fcard"><div class="fi">A±</div><h3>글자 크기</h3><p>본문·원어·사전 크기를 한 번에 조절.</p></div>
+      <div class="fcard"><div class="fi">💾</div><h3>상태 기억</h3><p>역본·순서·테마·마지막 위치·창 크기까지 저장.</p></div>
+      <div class="fcard"><div class="fi">⟳</div><h3>자동 업데이트</h3><p>새 버전을 확인하고 인앱으로 바로 설치.</p></div>
+    </div>
+  </section>
+
+  <!-- 9. CLOSING -->
+  <section class="slide center">
+    <div style="display:flex;flex-direction:column;align-items:center">
+      <div class="logo" style="width:56px;height:56px;border-radius:16px;font-size:30px;margin-bottom:20px">B</div>
+      <h1 style="font-size:clamp(30px,4.4vw,56px)">지금 <span class="grad-text">BibleClip</span>과 함께</h1>
+      <p class="lead">설치 없이 압축만 풀면 실행. Windows·macOS 모두 지원.
+        복사 한 번으로 끝나는 성경 인용.</p>
+      <div style="margin-top:26px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center">
+        <span class="btn pri" style="font-size:13px;padding:11px 20px;border-radius:12px">다운로드</span>
+        <span class="vpill" style="font-size:12px;padding:8px 13px">github.com/tpwns432-maker/AutoBible</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="hint">← → 또는 화면 클릭으로 이동</div>
+<div class="count" id="count">01 / 09</div>
+<div class="dots" id="dots"></div>
+<div class="nav"><button id="prev">‹</button><button id="next">›</button></div>
+
+<script>
+(function(){
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.getElementById('dots');
+  const bar=document.getElementById('bar');
+  const count=document.getElementById('count');
+  let i=0;
+  slides.forEach((_,n)=>{const d=document.createElement('div');d.className='dot'+(n===0?' on':'');d.onclick=()=>go(n);dotsWrap.appendChild(d);});
+  const dots=[...dotsWrap.children];
+  const pad=n=>String(n+1).padStart(2,'0');
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    bar.style.width=((i+1)/slides.length*100)+'%';
+    count.textContent=pad(i)+' / '+pad(slides.length-1);
+  }
+  document.getElementById('next').onclick=()=>go(i+1);
+  document.getElementById('prev').onclick=()=>go(i-1);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1);}
+    else if(e.key==='Home')go(0); else if(e.key==='End')go(slides.length-1);
+  });
+  // click left/right third of screen to navigate (ignore clicks on buttons/dots)
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('.nav,.dots'))return;
+    go(e.clientX < window.innerWidth/2 ? i-1 : i+1);
+  });
+  bar.style.width=(1/slides.length*100)+'%';
+})();
+</script>
+</body>
+</html>
