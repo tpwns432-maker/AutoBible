@@ -12,6 +12,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import bibleclip.webui.api as apimod
+from bibleclip.config import __version__
 from bibleclip.core.library import Library
 from bibleclip.webui.api import Api, markup_to_html
 
@@ -59,6 +60,12 @@ def monitor_check():
     res = api.start_monitoring()
     assert res.get('ok'), res
 
+    # The monitor picks up its poll interval from settings and is live-tunable.
+    assert api.lib._monitor is not None
+    assert api.lib._monitor.poll_interval == api.lib.settings['poll_interval']
+    api.lib.set_poll_interval(0.25)
+    assert api.lib._monitor.poll_interval == 0.25
+
     # A reference: should be converted in place and pushed as onReference.
     fake.text = '창 1:1'
     assert wait_for(lambda: any('onReference' in c for c in win.calls)), \
@@ -89,6 +96,9 @@ def main():
     last = init['last']
     assert last['book'] and last['chapter'], last
     assert isinstance(init['dark_mode'], bool) and isinstance(init['font_size'], int)
+    assert init['lex_lang'] in ('ko', 'en'), init['lex_lang']
+    assert isinstance(init['search_click_navigates'], bool)
+    assert init['version'] == __version__, init['version']
     print(f"get_initial: primary={init['primary']} versions={len(init['versions'])} "
           f"books={len(init['books'])} last={last['book']}:{last['chapter']}")
 
@@ -239,6 +249,37 @@ def main():
     # install only runs in a frozen build → graceful refusal under source mode
     assert api.install_update()['ok'] is False
     print("check_update (stubbed) + install source-mode guard OK")
+
+    # ---- App settings (⚙ window): get / set / reset (save_settings stubbed) ----
+    aset = api.get_app_settings()
+    assert aset['version'] == __version__, aset['version']
+    assert aset['lex_lang'] in ('ko', 'en'), aset
+    assert isinstance(aset['poll_interval'], float), aset
+    assert aset['repo_url'].startswith('https://'), aset['repo_url']
+    # poll_interval: coerced to float and clamped to [0.1, 2.0]
+    assert api.set_app_setting('poll_interval', 5)['value'] == 2.0
+    assert api.set_app_setting('poll_interval', 0)['value'] == 0.1
+    assert api.set_app_setting('poll_interval', 0.25)['value'] == 0.25
+    assert api.lib.settings['poll_interval'] == 0.25
+    # lex_lang enum: valid accepted, invalid rejected
+    assert api.set_app_setting('lex_lang', 'en')['ok']
+    assert api.lib.settings['lex_lang'] == 'en'
+    assert not api.set_app_setting('lex_lang', 'fr')['ok']
+    # boolean keys coerced
+    assert api.set_app_setting('search_click_navigates', 1)['ok']
+    assert api.lib.settings['search_click_navigates'] is True
+    assert api.set_app_setting('auto_update_check', 0)['ok']
+    assert api.lib.settings['auto_update_check'] is False
+    # unknown key rejected
+    assert not api.set_app_setting('no_such_app_key', 1)['ok']
+    print("app settings get/set (poll clamp, lex enum, bool) OK")
+
+    # reset restores every default
+    api.reset_settings()
+    assert api.lib.settings['poll_interval'] == Library.DEFAULT_SETTINGS['poll_interval']
+    assert api.lib.settings['lex_lang'] == 'ko'
+    assert api.lib.settings['search_click_navigates'] is False
+    print("reset_settings -> defaults restored")
 
     monitor_check()
 

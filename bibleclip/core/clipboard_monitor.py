@@ -11,7 +11,8 @@ import time
 class ClipboardMonitor:
     POLL_INTERVAL = 0.5
 
-    def __init__(self, read_fn, write_fn, build_output, on_reference, on_keyword):
+    def __init__(self, read_fn, write_fn, build_output, on_reference, on_keyword,
+                 poll_interval=None):
         """
         Args:
             read_fn():  returns current clipboard text.
@@ -20,12 +21,16 @@ class ClipboardMonitor:
             on_reference(result): called with a 'reference' result after the
                 formatted text has been written to the clipboard.
             on_keyword(keyword): called with the bare keyword for a '#…' query.
+            poll_interval: seconds between clipboard reads (defaults to
+                POLL_INTERVAL). Mutable at runtime via the attribute so the app
+                settings can re-tune a live monitor.
         """
         self.read_fn = read_fn
         self.write_fn = write_fn
         self.build_output = build_output
         self.on_reference = on_reference
         self.on_keyword = on_keyword
+        self.poll_interval = poll_interval or self.POLL_INTERVAL
         # `last` guards against re-processing our own output. It is also updated
         # externally (Library.notify_clipboard_written) when other code copies.
         self.last = ''
@@ -55,7 +60,7 @@ class ClipboardMonitor:
                     self._handle(current.strip())
             except Exception:
                 pass
-            time.sleep(self.POLL_INTERVAL)
+            time.sleep(self.poll_interval)
 
     def _handle(self, text):
         result = self.build_output(text)

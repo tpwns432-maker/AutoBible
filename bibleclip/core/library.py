@@ -43,6 +43,9 @@ class Library:
         'viewer_font_size': 11,
         'auto_update_check': True,
         'skip_update_version': '',
+        'lex_lang': 'ko',                 # default dictionary language (ko/en)
+        'poll_interval': 0.5,             # clipboard polling interval (seconds)
+        'search_click_navigates': False,  # search hit click also jumps the viewer
         'dark_mode': False,
         'geometry': '1100x780',
         'last_book_num': None,            # remember last viewed book/chapter
@@ -354,14 +357,22 @@ class Library:
 
     def start_monitoring(self, read_fn, write_fn, on_reference, on_keyword):
         self.stop_monitoring()
+        interval = (self.settings.get('poll_interval')
+                    or ClipboardMonitor.POLL_INTERVAL)
         self._monitor = ClipboardMonitor(read_fn, write_fn, self.build_output,
-                                         on_reference, on_keyword)
+                                         on_reference, on_keyword,
+                                         poll_interval=interval)
         self._monitor.start()
 
     def stop_monitoring(self):
         if self._monitor is not None:
             self._monitor.stop()
             self._monitor = None
+
+    def set_poll_interval(self, seconds):
+        """Re-tune a running monitor's polling interval (no restart needed)."""
+        if self._monitor is not None:
+            self._monitor.poll_interval = seconds
 
     def notify_clipboard_written(self, text):
         """Tell an active monitor that `text` was just placed on the clipboard

@@ -139,6 +139,8 @@
     version: null, book: null, chapter: null,
     versions: [], viewer: [], books: [], chapters: [], monitoring: false,
     fontSize: 11,
+    searchVersion: null,      // version used for keyword search (default = primary)
+    searchClickNav: false,    // search hit click also jumps the viewer
   };
 
   function applyFontScale() {
@@ -157,6 +159,12 @@
     root.dataset.theme = init.dark_mode ? "dark" : "light";
     state.fontSize = init.font_size || 11;
     applyFontScale();
+    lexLang = init.lex_lang === "en" ? "en" : "ko";
+    syncLangSeg();
+    state.searchClickNav = !!init.search_click_navigates;
+    state.searchVersion = state.version;   // default search version = primary
+    const verLabel = $("app-ver");
+    if (verLabel && init.version) verLabel.textContent = "v" + init.version;
     renderVerChips();
     state.chapters = await api().get_chapters(state.version, state.book);
     if (!state.chapters.includes(state.chapter)) {
@@ -167,6 +175,7 @@
     wireMonitor();
     wireTabs();
     wireUpdate();
+    wireAppSettings();
     if (init.auto_update_check) checkUpdate(true); // silent startup check
   }
 
@@ -572,6 +581,112 @@
     if (b) b.disabled = false;
   }
 
+  // ---- App settings modal (⚙ gear) ----
+
+  // Reflect the dictionary default-language onto the viewer's 한글/영어 segment.
+  function syncLangSeg() {
+    const seg = document.querySelector('.seg[data-seg="lang"]');
+    if (!seg) return;
+    const opts = seg.querySelectorAll(".opt");
+    if (opts[0]) opts[0].classList.toggle("on", lexLang === "ko");
+    if (opts[1]) opts[1].classList.toggle("on", lexLang === "en");
+  }
+
+  // Highlight the .opt whose data-val matches `current` and wire click→onPick.
+  // `eq` customizes matching (e.g. numeric for the poll interval).
+  function setSeg(seg, current, onPick, eq) {
+    if (!seg) return;
+    const same = eq || ((a, b) => a === b);
+    seg.querySelectorAll(".opt").forEach((opt) => {
+      opt.classList.toggle("on", same(opt.dataset.val, current));
+      opt.onclick = () => {
+        seg.querySelectorAll(".opt").forEach((o) => o.classList.remove("on"));
+        opt.classList.add("on");
+        onPick(opt.dataset.val);
+      };
+    });
+  }
+
+  function setSwitch(row, on, onToggle) {
+    if (!row) return;
+    const sw = row.querySelector(".switch");
+    sw.classList.toggle("on", !!on);
+    row.onclick = () => {
+      const next = !sw.classList.contains("on");
+      sw.classList.toggle("on", next);
+      onToggle(next);
+    };
+  }
+
+  function closeAppSettings() {
+    const m = $("settings-modal");
+    if (m) m.hidden = true;
+  }
+
+  async function openAppSettings() {
+    const m = $("settings-modal");
+    if (!m) return;
+    const s = await api().get_app_settings();
+    const ver = $("set-version");
+    if (ver) ver.textContent = "v" + s.version;
+
+    setSeg($("opt-poll"), s.poll_interval,
+      (val) => api().set_app_setting("poll_interval", parseFloat(val)),
+      (a, b) => parseFloat(a) === parseFloat(b));
+
+    setSeg($("opt-lex-lang"), s.lex_lang, (val) => {
+      lexLang = val;
+      syncLangSeg();
+      if (lexCur) showStrong(lexCur.code, lexCur.verse);
+      api().set_app_setting("lex_lang", val);
+    });
+
+    setSwitch($("opt-search-nav"), s.search_click_navigates, (on) => {
+      state.searchClickNav = on;
+      api().set_app_setting("search_click_navigates", on);
+    });
+    setSwitch($("opt-auto-update"), s.auto_update_check,
+      (on) => api().set_app_setting("auto_update_check", on));
+
+    wireSettingsActions();
+    m.hidden = false;
+  }
+
+  // Action buttons are re-wired on each open so the reset confirm re-arms.
+  function wireSettingsActions() {
+    const df = $("act-data-folder");
+    if (df) df.onclick = async () => {
+      const r = await api().open_data_folder();
+      if (!r || !r.ok) toast("폴더를 열 수 없습니다");
+    };
+    const gh = $("act-github");
+    if (gh) gh.onclick = () => api().open_github();
+    const rs = $("act-reset");
+    if (rs) {
+      rs.textContent = "설정 초기화";
+      let armed = false;
+      rs.onclick = async () => {
+        if (!armed) { armed = true; rs.textContent = "한 번 더 누르면 초기화"; return; }
+        await api().reset_settings();
+        location.reload();   // re-read the fresh defaults
+      };
+    }
+  }
+
+  function wireAppSettings() {
+    const gear = $("nav-app-settings");
+    if (gear) gear.addEventListener("click", openAppSettings);
+    const close = $("settings-close");
+    if (close) close.addEventListener("click", closeAppSettings);
+    const overlay = $("settings-modal");
+    if (overlay) overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) closeAppSettings();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeAppSettings();
+    });
+  }
+
   // ---- Clipboard monitoring ----
 
   function setStatus(active) {
@@ -891,7 +1006,7 @@
     if (!q) return;
     $("search-meta").textContent = "";
     $("search-results").innerHTML = `<div class="panel-loading">검색 중…</div>`;
-    renderSearch(await api().search(q));
+    renderSearch(await api().search(q, state.searchVersion || undefined));
   }
 
   function renderSearch(res) {
@@ -903,7 +1018,8 @@
       return;
     }
     $("search-meta").textContent =
-      `"${res.keyword}" 결과 ${searchHits.length}건 · ${res.display} — 구절 클릭 시 복사`;
+      `"${res.keyword}" 결과 ${searchHits.length}건 · ${res.display} — 구절 클릭 시 ` +
+      (state.searchClickNav ? "복사 + 본문 이동" : "복사");
     host.innerHTML = searchHits
       .map(
         (h, i) =>
@@ -919,8 +1035,17 @@
           el.classList.add("copied");
           setTimeout(() => el.classList.remove("copied"), 700);
         }
+        if (state.searchClickNav) {
+          showView("viewer");
+          goToRef(h.book, h.chapter, [h.verse]);
+        }
       });
     });
+  }
+
+  function updateSearchVerLabel() {
+    const sv = $("search-ver");
+    if (sv) sv.textContent = state.searchVersion || state.version || "—";
   }
 
   function wireSearch() {
@@ -931,6 +1056,24 @@
         if (e.key === "Enter") runSearch();
       });
     }
+    // Search version picker (defaults to the primary; changing it re-runs).
+    const sv = $("search-ver");
+    if (sv) {
+      sv.addEventListener("click", () => {
+        openMenu(
+          sv,
+          state.versions.map((v) => ({
+            label: v.display, value: v.name, on: v.name === state.searchVersion,
+          })),
+          (name) => {
+            state.searchVersion = name;
+            updateSearchVerLabel();
+            if ($("search-input").value.trim()) runSearch();
+          }
+        );
+      });
+    }
+    updateSearchVerLabel();
   }
 
   // ---- View switching (viewer / settings / search) ----

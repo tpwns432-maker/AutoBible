@@ -15,7 +15,12 @@ import tempfile
 import subprocess
 import webbrowser
 
-from bibleclip.config import __version__, RELEASES_PAGE_URL, IS_WINDOWS, get_base_dir
+from bibleclip.config import (
+    __version__, RELEASES_PAGE_URL, IS_WINDOWS, get_base_dir,
+    GITHUB_OWNER, GITHUB_REPO,
+)
+
+REPO_HOME_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 from bibleclip.update import fetch_latest_release, parse_version
 from bibleclip.core.installer import (
     download_file, stage_payload, write_windows_bat, write_mac_sh,
@@ -238,6 +243,9 @@ class Api:
             'dark_mode': bool(s.get('dark_mode')),
             'font_size': int(s.get('viewer_font_size', 11)),
             'auto_update_check': bool(s.get('auto_update_check', True)),
+            'lex_lang': 'en' if s.get('lex_lang') == 'en' else 'ko',
+            'search_click_navigates': bool(s.get('search_click_navigates', False)),
+            'version': __version__,
         }
 
     # ---- UI preferences (persisted; shared with the desktop app) ----
@@ -262,6 +270,80 @@ class Api:
         needed). Returns {added:[names], versions:[...]} for the UI to refresh."""
         added = self.lib.refresh_databases()
         return {'added': added, 'versions': self.lib.versions()}
+
+    # ---- App-wide settings (the gear ⚙ window — distinct from 출력 설정) ----
+
+    # Whitelisted app settings. Enums carry allowed values; None = boolean;
+    # 'poll_interval' is a float clamped on write.
+    _APP_KEYS = {
+        'auto_update_check': None,
+        'search_click_navigates': None,
+        'lex_lang': {'ko', 'en'},
+        'poll_interval': 'float',
+    }
+
+    def get_app_settings(self):
+        """Everything the ⚙ settings window shows."""
+        s = self.lib.settings
+        return {
+            'auto_update_check': bool(s.get('auto_update_check', True)),
+            'search_click_navigates': bool(s.get('search_click_navigates', False)),
+            'lex_lang': 'en' if s.get('lex_lang') == 'en' else 'ko',
+            'poll_interval': float(s.get('poll_interval', 0.5) or 0.5),
+            'version': __version__,
+            'repo_url': REPO_HOME_URL,
+        }
+
+    def set_app_setting(self, key, value):
+        """Update one whitelisted app setting and persist. A poll-interval change
+        is also applied to a running monitor live. Returns {ok, value}."""
+        if key not in self._APP_KEYS:
+            return {'ok': False, 'error': f'unknown key: {key}'}
+        spec = self._APP_KEYS[key]
+        if spec == 'float':
+            try:
+                value = float(value)
+            except (TypeError, ValueError):
+                value = 0.5
+            value = round(max(0.1, min(2.0, value)), 2)
+        elif spec is None:
+            value = bool(value)
+        elif value not in spec:
+            return {'ok': False, 'error': f'invalid value for {key}: {value!r}'}
+        self.lib.settings[key] = value
+        self.lib.save_settings()
+        if key == 'poll_interval':
+            self.lib.set_poll_interval(value)
+        return {'ok': True, 'value': value}
+
+    def reset_settings(self):
+        """Restore every setting to its default (the "설정 초기화" button). The
+        front-end reloads afterwards to re-read the fresh state."""
+        self.lib.settings = dict(self.lib.DEFAULT_SETTINGS)
+        self.lib.save_settings()
+        return {'ok': True}
+
+    def open_data_folder(self):
+        """Open the folder that holds bible_versions/original_lang in the OS file
+        manager (so the user can drop in new .db files)."""
+        path = get_base_dir()
+        try:
+            if IS_WINDOWS:
+                os.startfile(path)  # noqa: S606 - user-initiated
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', path])
+            else:
+                subprocess.Popen(['xdg-open', path])
+            return {'ok': True}
+        except Exception:
+            return {'ok': False}
+
+    def open_github(self):
+        try:
+            webbrowser.open(REPO_HOME_URL)
+            return {'ok': True}
+        except Exception:
+            return {'ok': False}
 
     # ---- Update check (GitHub releases) ----
 

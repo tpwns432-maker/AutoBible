@@ -1,7 +1,7 @@
 # BibleClip — 작업 인계 노트 (HANDOFF)
 
 > 대화를 `/clear` 한 뒤 다음 세션이 빠르게 이어받기 위한 문서.
-> 최종 업데이트: **v1.5.4 — 웹(pywebview) UI로 전환 릴리스 진행** (2026-06-02). High 리라이트 완료(Phase 0~5), CTk→웹 대체. main 머지+태그 v1.5.4 push로 CI가 웹 Win/Mac 빌드·릴리스. (CTk 빌드 잡 제거됨.)
+> 최종 업데이트: **v1.5.5 — 검색 역본 선택 · 앱 설정 창(⚙) · 검색 클릭 이동** (2026-06-02). 구현·실창 검증 완료 → main 머지+태그 v1.5.5 릴리스 진행. 상세는 §10. (직전: v1.5.4 웹 전환.)
 
 ---
 
@@ -200,21 +200,20 @@ docs/  CHANGELOG.md · BUILD_MAC.md · HANDOFF.md(이 파일) · pipelines/*.htm
 
 ---
 
-## 10. 다음 작업 (예정 패치) — v1.5.5 후보
-세이브 지점(2026-06-02): v1.5.4 웹 전환 릴리스 완료. 다음 세션에서 아래 3건 진행 예정.
+## 10. v1.5.5 — 검색 역본 선택 · 앱 설정 창 · 검색 클릭 이동 (✅ 완료, 사용자 실창 검증)
+세이브 지점(2026-06-02): v1.5.4 웹 전환 릴리스 완료 후, 아래 3건 구현·검증 완료. 브랜치 `feat/v1.5.5-search-settings`.
 
-1. **검색 역본 선택** — `#검색`(키워드 검색)에 쓸 성경 버전을 사용자가 고르게.
-   현재 `webui/api.py:search()`는 `_search_version()`(primary/한국어)로 고정. 검색 뷰(`web/index.html` `#search-view`, `app.js` `runSearch/renderSearch`)에 역본 선택 드롭다운/칩 추가 → `search(keyword, version)`에 전달. (기본값은 현재 보던 primary.)
+1. **검색 역본 선택** (✅) — 검색 바(`web/index.html #search-view`)에 역본 칩 `#search-ver`(`.pill.dropdown`) 추가. `app.js` `wireSearch`에 드롭다운(`openMenu`)·`updateSearchVerLabel`, `runSearch`가 `state.searchVersion`(기본=primary)을 `api.search(q, version)`에 전달. 변경 시 즉시 재검색.
 
-2. **설정 창 구현** — 좌측 레일 맨 아래 **톱니(설정) 아이콘이 현재 死버튼**(`index.html`의 마지막 `.nav-icon` "설정", id 없음·핸들러 없음). 누르면 뜰 **앱 설정** 창/패널을 만들 것. 담을 후보:
-   - 시작 시 자동 업데이트 확인 on/off(`auto_update_check` 이미 settings에 있음)
-   - 사전 기본 언어(한/영) 기본값
-   - 클립보드 폴링 간격(현재 `ClipboardMonitor.POLL_INTERVAL=0.5`)
-   - 검색 결과 클릭 시 본문 이동 토글(아래 3번)
-   - 정보(버전/깃허브 링크), 설정 초기화, 데이터 폴더 열기 등
-   - (출력 설정 탭과는 구분 — 이건 "앱 전반" 설정)
-   ※ 출력설정은 이미 sliders 아이콘(`#nav-settings`)에 있음. 이건 별개의 gear.
+2. **앱 설정 창(⚙)** (✅) — 死버튼이던 레일 톱니에 `id=nav-app-settings` + 신규 모달(`#settings-modal`, `index.html` 하단). `app.js`: `openAppSettings`(get_app_settings로 채움)/`setSeg`/`setSwitch`/`wireSettingsActions`(리셋은 2단계 확인)/`wireAppSettings`(✕·바깥클릭·Esc 닫기). 백엔드 `webui/api.py`: `get_app_settings`/`set_app_setting`(화이트리스트 `_APP_KEYS`: enum/bool/float-clamp)/`reset_settings`/`open_data_folder`(os.startfile/open/xdg-open)/`open_github`(REPO_HOME_URL). 항목: 폴링간격(0.25/0.5/1초)·사전기본언어·검색클릭이동·자동업데이트·버전/데이터폴더/깃허브/초기화.
+   - **폴링 간격 라이브화**: `ClipboardMonitor.__init__(poll_interval=...)`+인스턴스 속성(`POLL_INTERVAL`은 기본 상수로 유지), `Library.start_monitoring`이 `settings['poll_interval']` 사용, `Library.set_poll_interval`로 실행 중 변경. `set_app_setting('poll_interval')`이 즉시 적용.
 
-3. **검색 결과 클릭 시 본문 이동 토글** — 현재 검색 결과 클릭은 **복사만** 함(`app.js` renderSearch의 `.sr` click → `copy_reference`+토스트). 옵션을 켜면 복사 + 해당 구절로 **본문 뷰 이동**(`showView('viewer')`+`goToRef`)까지. 설정값은 새 키(예 `search_click_navigates`)로 저장(2번 설정 창에 토글 노출).
+3. **검색 결과 클릭 시 본문 이동 토글** (✅) — 새 설정 `search_click_navigates`(②의 토글). `renderSearch`의 `.sr` click이 복사 후 켜져 있으면 `showView('viewer')`+`goToRef`. search-meta 힌트도 상태 반영. 부팅 시 `init.search_click_navigates`로 `state.searchClickNav` 복원.
+
+- 새 설정 키(`DEFAULT_SETTINGS`): `lex_lang`('ko')·`poll_interval`(0.5)·`search_click_navigates`(False). `get_initial`에 `lex_lang`/`search_click_navigates`/`version` 추가, 부팅 시 `lexLang`·viewer 한/영 세그(`syncLangSeg`)·상단바 버전 라벨(`#app-ver`) 복원.
+- CSS: `web/css/styles.css` 끝에 모달(`.modal-overlay/.modal/.set-group/.btn.danger`)·검색바 칩 스타일 추가.
+- **검증**: 헤드리스 `tests/test_webui_api.py` 확장(get_app_settings/set_app_setting[poll clamp·lex enum·bool·미지키]·reset_settings·라이브 poll_interval·get_initial 새 키, save 스텁). `node --check web/app.js` OK, NUL 0. 사용자 실창 전 항목 OK.
+
+**다음 후보(미착수)**: 보류된 클립보드 감시 간헐 지연(메모리 참고 — 이제 폴링 간격을 0.25초로 낮추는 설정이 생겼으니 일부 완화 가능, 실패/빈 읽기 재시도는 여전히 미구현).
 
 재개 시: 이 파일 + `메모리(bibleclip-project-status)` 읽고 시작. 헤드리스 테스트 3종(`tests/test_webui_api.py`, `test_installer.py`, `test_core.py`)으로 회귀 확인. 커밋 전 `web/app.js` NUL 점검.

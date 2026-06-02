@@ -42,7 +42,7 @@
       <!-- moon -->
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
     </div>
-    <div class="nav-icon" title="설정" aria-label="설정">
+    <div class="nav-icon" id="nav-app-settings" title="설정" aria-label="설정">
       <!-- gear -->
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
     </div>
@@ -54,7 +54,7 @@
     <!-- Top bar -->
     <header class="topbar">
       <span class="brand">BibleClip</span>
-      <span class="ver">v1.5.3</span>
+      <span class="ver" id="app-ver">v1.5.5</span>
       <span class="spacer"></span>
       <button class="btn primary" id="monitor-btn">모니터링 시작</button>
       <span class="badge" id="status-badge">대기 중</span>
@@ -168,6 +168,7 @@
       <div class="search-bar">
         <input type="text" id="search-input" class="search-input"
                placeholder="검색어 입력 (예: 사랑) — 다른 앱에서 #사랑 복사 시 자동 검색">
+        <span class="pill dropdown" id="search-ver" title="검색할 역본">KRV</span>
         <button class="btn primary" id="search-go">검색</button>
       </div>
       <div class="search-meta" id="search-meta"></div>
@@ -192,6 +193,68 @@
     </div>
   </aside>
 
+</div>
+
+<!-- App-wide settings (⚙ gear in the rail). Distinct from the 출력 설정 view:
+     these are app-level preferences. Controls are populated from
+     api.get_app_settings() and written back via api.set_app_setting(). -->
+<div class="modal-overlay" id="settings-modal" hidden>
+  <div class="modal" role="dialog" aria-label="설정">
+    <div class="modal-head">
+      <span>설정</span>
+      <span class="modal-close" id="settings-close" title="닫기">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="set-group">
+        <div class="set-group-h">클립보드</div>
+        <div class="set-row">
+          <span class="set-label">확인 간격</span>
+          <div class="seg" id="opt-poll">
+            <div class="opt" data-val="0.25">빠름 · 0.25초</div>
+            <div class="opt" data-val="0.5">기본 · 0.5초</div>
+            <div class="opt" data-val="1.0">느림 · 1초</div>
+          </div>
+        </div>
+        <p class="set-note">간격이 짧을수록 빠르게 인식하지만 CPU를 조금 더 씁니다.</p>
+      </div>
+
+      <div class="set-group">
+        <div class="set-group-h">사전</div>
+        <div class="set-row">
+          <span class="set-label">기본 언어</span>
+          <div class="seg" id="opt-lex-lang">
+            <div class="opt" data-val="ko">한글</div>
+            <div class="opt" data-val="en">영어</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <div class="set-group-h">검색 · 업데이트</div>
+        <div class="set-toggle" id="opt-search-nav">
+          <span class="set-label">검색 결과 클릭 시 본문으로 이동</span>
+          <span class="switch"><span class="knob"></span></span>
+        </div>
+        <div class="set-toggle" id="opt-auto-update">
+          <span class="set-label">시작 시 자동으로 업데이트 확인</span>
+          <span class="switch"><span class="knob"></span></span>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <div class="set-group-h">정보 · 관리</div>
+        <div class="set-row info-row">
+          <span class="set-label">버전</span>
+          <span class="set-info" id="set-version">—</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn" id="act-data-folder">데이터 폴더 열기</button>
+          <button class="btn" id="act-github">GitHub 열기</button>
+          <button class="btn danger" id="act-reset">설정 초기화</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Transient confirmation when a reference is converted on the clipboard. -->
