@@ -36,8 +36,14 @@
   const esc = (s) =>
     String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+  // Tears down the listeners (scroll/click) registered by the open menu, so they
+  // don't leak across opens. (A stale scroll listener from a previous menu would
+  // otherwise close the next one — its closed-over menu no longer contains the
+  // new menu, so it'd treat an inside-scroll as a background scroll.)
+  let menuCleanup = null;
   function closeMenus() {
     document.querySelectorAll(".menu").forEach((m) => m.remove());
+    if (menuCleanup) { menuCleanup(); menuCleanup = null; }
   }
 
   // Anchored popup menu. items: [{label, value, on}], onPick(value).
@@ -69,15 +75,19 @@
     const left = Math.min(r.left, window.innerWidth - menu.offsetWidth - 8);
     menu.style.top = Math.max(8, top) + "px";
     menu.style.left = Math.max(8, left) + "px";
-    const onScroll = () => closeMenus();
+    // Close on background scroll (the anchored menu would detach), but NOT when
+    // scrolling inside the menu itself (long book/chapter lists are scrollable).
+    const onScroll = (e) => { if (!menu.contains(e.target)) closeMenus(); };
+    const onDocClick = (e) => {
+      if (!menu.contains(e.target) && e.target !== anchor) closeMenus();
+    };
+    // Registered (and torn down by closeMenus) as a pair so neither leaks.
+    menuCleanup = () => {
+      document.removeEventListener("click", onDocClick);
+      window.removeEventListener("scroll", onScroll, true);
+    };
     setTimeout(() => {
-      document.addEventListener("click", function h(e) {
-        if (!menu.contains(e.target) && e.target !== anchor) {
-          closeMenus();
-          document.removeEventListener("click", h);
-          window.removeEventListener("scroll", onScroll, true);
-        }
-      });
+      document.addEventListener("click", onDocClick);
       window.addEventListener("scroll", onScroll, true);
     }, 0);
   }
